@@ -130,7 +130,8 @@
     </Link>
     <PreBuildEvent>
       <Command>copy .\*.fx ..\x64\Debug
-copy .\*.dds ..\x64\Debug</Command>
+copy .\*.dds ..\x64\Debug
+copy .\*.hdr ..\x64\Debug</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -153,7 +154,8 @@ copy .\*.dds ..\x64\Debug</Command>
     </Link>
     <PreBuildEvent>
       <Command>copy .\*.fx ..\x64\Release
-copy .\*.dds ..\x64\Release</Command>
+copy .\*.dds ..\x64\Release
+copy .\*.hdr ..\x64\Release</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
