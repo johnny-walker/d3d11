@@ -1,14 +1,13 @@
 //--------------------------------------------------------------------------------------
 // File: cubemap.fx
 //--------------------------------------------------------------------------------------
-
-Texture2D txHdrMap : register(t0);
 SamplerState samLinear : register(s0);
+Texture2D txHdrMap : register(t0);
 
 //--------------------------------------------------------------------------------------
-// Constant Buffer Variables
+// Constant Cube Buffer Variables
 //--------------------------------------------------------------------------------------
-cbuffer ConstantBuffer : register( b0 )
+cbuffer ConstCubeBuffer : register( b0 )
 {
 	matrix World;
 	matrix View;
@@ -53,9 +52,11 @@ float2 SampleSphericalMap(float3 v)
     uv += 0.5;
     return uv;
 }
+
 float4 PS_Cubmap_from_HDR(PS_INPUT input) : SV_Target
 {
-    float2 uv = SampleSphericalMap(normalize(input.Pos.xyz));
+    float3 nrmlPos = normalize(input.Pos.xyz);
+    float2 uv = SampleSphericalMap(nrmlPos);
     float3 color = txHdrMap.Sample(samLinear, uv).rgb;
     return float4(color, 1.0);
 }
