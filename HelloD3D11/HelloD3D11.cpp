@@ -842,7 +842,7 @@ void Render()
     g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-    //RenderWorld();
+    RenderWorld();
 
     // Present our back buffer to our front buffer
     g_pSwapChain->Present(0, 0);
@@ -1270,7 +1270,7 @@ void CreateSkyboxDepthStencilState()
     ZeroMemory(&dssDesc, sizeof(D3D11_DEPTH_STENCIL_DESC));
     dssDesc.DepthEnable = true;
     dssDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-    dssDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+    dssDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;    // must set as LESS_EQUAL
 
     g_pd3dDevice->CreateDepthStencilState(&dssDesc, &g_pSkyboxDepthState);
     return;
@@ -1367,7 +1367,7 @@ void RenderSkybox()
     g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
 
     g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);
-    g_pImmediateContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);
+    g_pImmediateContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have
 
     g_pImmediateContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
 
@@ -1392,10 +1392,8 @@ void CleanupIBL()
     for (int i = 0; i < 6; i++) {
         if (g_pCubeMapRTVs[i]) g_pCubeMapRTVs[i]->Release();
     }
-
     if (g_pSkyboxVertexShader) g_pSkyboxVertexShader->Release();
     if (g_pSkyboxPixelShader) g_pSkyboxPixelShader->Release();
-
     if (g_pCubeTex) g_pCubeTex->Release();
     if (g_pCubeTexSR) g_pCubeTexSR->Release();
 
