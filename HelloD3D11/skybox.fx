@@ -1,4 +1,6 @@
 //--------------------------------------------------------------------------------------
+// https://www.braynzarsoft.net/viewtutorial/q16390-20-cube-mapping-skybox
+// https://learnopengl.com/Advanced-OpenGL/Cubemaps
 // File: skybox.fx (image based lighting)
 //--------------------------------------------------------------------------------------
 SamplerState samLinear : register(s0);
@@ -35,24 +37,21 @@ SKYMAP_VS_OUTPUT VS_SkyBox(SKYMAP_INPUT input )
 {
     //remove the translation part of the view matrix 
     //so only rotation will affect the skybox's position vectors
-    matrix rotView = View;
-    rotView[0][3] = 0.f;
-    rotView[1][3] = 0.f;
-    rotView[2][3] = 0.f;
-    rotView[3][3] = 1.f;
-    rotView[3][0] = 0.f;
-    rotView[3][1] = 0.f;
-    rotView[3][2] = 0.f;
+    matrix rotateView = View;
+    rotateView[0][3] = 0.f;
+    rotateView[1][3] = 0.f;
+    rotateView[2][3] = 0.f;
+    rotateView[3][3] = 1.f;
+    rotateView[3][0] = 0.f;
+    rotateView[3][1] = 0.f;
+    rotateView[3][2] = 0.f;
 
     SKYMAP_VS_OUTPUT output = (SKYMAP_VS_OUTPUT)0;
-    //output.Pos = mul(input.Pos, World);
-    output.Pos = mul(input.Pos, rotView);
+    output.Pos = mul(input.Pos, rotateView);
     output.Pos = mul(output.Pos, Projection);
-
     output.Pos = output.Pos.xyww;
 
     output.texCoord = input.Pos;
-
     return output;
  }
 
@@ -62,10 +61,10 @@ SKYMAP_VS_OUTPUT VS_SkyBox(SKYMAP_INPUT input )
 //--------------------------------------------------------------------------------------
 float4 PS_SkyBox(SKYMAP_VS_OUTPUT input) : SV_Target
 {
-    float3 envColor = float3(0.f, 1.f, 1.f);
-    //float3 envColor = txCubeMap.SampleLevel(samLinear, input.texCoord, 0).rgb;
-    return float4(envColor, 1.f);
+    //float3 envColor = float3(0.f, 1.f, 1.f);
+    //return float4(envColor, 1.f);
 
+    float3 envColor = txCubeMap.SampleLevel(samLinear, input.texCoord, 0).rgb;
 
     // HDR tonemap and gamma correct
     envColor = envColor / (envColor + float3(1.f, 1.f, 1.f));

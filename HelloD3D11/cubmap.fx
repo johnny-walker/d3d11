@@ -14,7 +14,6 @@ cbuffer ConstCubeBuffer : register( b0 )
 	matrix Projection;
 }
 
-
 //--------------------------------------------------------------------------------------
 struct VS_INPUT
 {
@@ -42,7 +41,7 @@ PS_INPUT VS_Cubemap( VS_INPUT input )
 
 
 //--------------------------------------------------------------------------------------
-// Pixel Shader: PS_Cubmap_from_HDR
+// Pixel Shader: PS_Cubmap (from_HDR)
 //--------------------------------------------------------------------------------------
 float2 SampleSphericalMap(float3 v)
 {
@@ -53,7 +52,7 @@ float2 SampleSphericalMap(float3 v)
     return uv;
 }
 
-float4 PS_Cubmap_from_HDR(PS_INPUT input) : SV_Target
+float4 PS_Cubmap(PS_INPUT input) : SV_Target
 {
     float3 nrmlPos = normalize(input.Pos.xyz);
     float2 uv = SampleSphericalMap(nrmlPos);
