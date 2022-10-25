@@ -668,6 +668,7 @@ HRESULT CreateSamplerLinear()
     }
     return hr;
 }
+
 HRESULT LoadTexture()
 {
     HRESULT hr = S_OK;
@@ -718,29 +719,6 @@ HRESULT InitConstBuffer(UINT width, UINT height)
     g_Projection = XMMatrixPerspectiveFovLH(XM_PIDIV2, (FLOAT)width / (FLOAT)height, 0.01f, 100.f);
 
     return S_OK;
-}
-
-void CleanupDevice()
-{
-    if (g_pImmediateContext) g_pImmediateContext->ClearState();
-
-    if (g_pSamplerLinear) g_pSamplerLinear->Release();
-    if (g_pTextureRV) g_pTextureRV->Release();  
-    if (g_pConstantBuffer) g_pConstantBuffer->Release();
-    if (g_pVertexBuffer) g_pVertexBuffer->Release();
-    if (g_pIndexBuffer) g_pIndexBuffer->Release();
-    if (g_pVertexLayout) g_pVertexLayout->Release();
-    if (g_pVertexShader) g_pVertexShader->Release();
-    if (g_pPixelShader) g_pPixelShader->Release();
-    if (g_pRasterizerState) g_pRasterizerState->Release();
-    if (g_pDepthStencil) g_pDepthStencil->Release();
-    if (g_pDepthStencilView) g_pDepthStencilView->Release();
-    if (g_pRenderTargetView) g_pRenderTargetView->Release();
-    if (g_pSwapChain) g_pSwapChain->Release();
-    if (g_pImmediateContext) g_pImmediateContext->Release();
-    if (g_pd3dDevice) g_pd3dDevice->Release();
-
-    CleanupIBL();
 }
 
 void RenderWorld() 
@@ -848,6 +826,29 @@ void Render()
     g_pSwapChain->Present(0, 0);
 }
 
+void CleanupDevice()
+{
+    if (g_pImmediateContext) g_pImmediateContext->ClearState();
+
+    if (g_pSamplerLinear) g_pSamplerLinear->Release();
+    if (g_pTextureRV) g_pTextureRV->Release();
+    if (g_pConstantBuffer) g_pConstantBuffer->Release();
+    if (g_pVertexBuffer) g_pVertexBuffer->Release();
+    if (g_pIndexBuffer) g_pIndexBuffer->Release();
+    if (g_pVertexLayout) g_pVertexLayout->Release();
+    if (g_pVertexShader) g_pVertexShader->Release();
+    if (g_pPixelShader) g_pPixelShader->Release();
+    if (g_pRasterizerState) g_pRasterizerState->Release();
+    if (g_pDepthStencil) g_pDepthStencil->Release();
+    if (g_pDepthStencilView) g_pDepthStencilView->Release();
+    if (g_pRenderTargetView) g_pRenderTargetView->Release();
+    if (g_pSwapChain) g_pSwapChain->Release();
+    if (g_pImmediateContext) g_pImmediateContext->Release();
+    if (g_pd3dDevice) g_pd3dDevice->Release();
+
+    CleanupIBL();
+}
+
 // IBL, cubmap, skybox
 ID3DBlob*                   g_pCubeVSBlob = NULL;
 ID3D11VertexShader*         g_pCubeVertexShader = NULL;
@@ -878,9 +879,7 @@ HRESULT InitCubeVertex();
 HRESULT LoadHDRTexture();
 HRESULT InitIBLConstBuffer();
 HRESULT CreateSkyboxRasterState();
-
 void    DrawCubeMap(UINT);
-void    RenderCube(UINT);
 
 HRESULT InitIBL() 
 {
@@ -931,7 +930,7 @@ HRESULT InitHDRRenderTarget(UINT cubeMapSize)
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     srvDesc.Format = cubeMapDesc.Format;	
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-    srvDesc.TextureCube.MipLevels = -1;	        //-1 use all mips
+    srvDesc.TextureCube.MipLevels = -1;	        //-1, use all mips
     srvDesc.TextureCube.MostDetailedMip = 0;	//the finest mip level, 0
     
     g_pd3dDevice->CreateShaderResourceView(g_pCubeTex, &srvDesc, &g_pCubeTexSR);
@@ -998,9 +997,9 @@ HRESULT InitIBLShaders()
 
     // Create the vertex shader
     hr = g_pd3dDevice->CreateVertexShader(g_pCubeVSBlob->GetBufferPointer(),
-                                        g_pCubeVSBlob->GetBufferSize(),
-                                        NULL,
-                                        &g_pCubeVertexShader);
+                                          g_pCubeVSBlob->GetBufferSize(),
+                                          NULL,
+                                          &g_pCubeVertexShader);
     if (FAILED(hr)) {
         g_pCubeVSBlob->Release();
         return hr;
@@ -1018,9 +1017,9 @@ HRESULT InitIBLShaders()
 
     // Create the pixel shader (PS)
     hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(),
-                                    pPSBlob->GetBufferSize(),
-                                    NULL,
-                                    &g_pCubePixelShader);
+                                         pPSBlob->GetBufferSize(),
+                                         NULL,
+                                         &g_pCubePixelShader);
     pPSBlob->Release();
 
     return hr;
@@ -1082,17 +1081,17 @@ HRESULT InitCubeVertex() {
 
     // Set the input layout 
     hr = g_pd3dDevice->CreateInputLayout(layout,
-                                        numElements,
-                                        g_pCubeVSBlob->GetBufferPointer(),
-                                        g_pCubeVSBlob->GetBufferSize(),
-                                        &g_pCubeVertexLayout);
+                                         numElements,
+                                         g_pCubeVSBlob->GetBufferPointer(),
+                                         g_pCubeVSBlob->GetBufferSize(),
+                                         &g_pCubeVertexLayout);
     g_pCubeVSBlob->Release();
     if (FAILED(hr))
         return hr;
 
     //g_pImmediateContext->IASetInputLayout(g_pCubeVertexLayout);
 
-    // Set vertex buffer
+    // Set vertex buffer (clockwise)
     CubeVertex vertices[24] =
     {
         { XMFLOAT3(-1.f,  1.f, -1.f)},
@@ -1296,7 +1295,7 @@ HRESULT CreateSkyboxRasterState()
     return hr;
 }
 
-
+void RenderCube(UINT);
 void DrawCubeMap(UINT cubeMapSize)
 {
     SetViewPort(cubeMapSize, cubeMapSize);
@@ -1326,7 +1325,7 @@ void RenderCube(UINT face)
 {
     // Clear cube map face and depth buffer.
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red,green,blue,alpha
+    float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red, green, blue, alpha
     g_pImmediateContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
     g_pImmediateContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 
