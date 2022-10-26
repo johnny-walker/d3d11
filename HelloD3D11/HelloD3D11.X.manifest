@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?> 
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" 
+manifestVersion="1.0">  
+  <file name = "ImageWrapper.dll">
+    <comClass clsid="{F660FBC0-5936-11DD-AE16-0800200C9A66}" threadingModel = "Both" />
+  </file>
+ </assembly>
+

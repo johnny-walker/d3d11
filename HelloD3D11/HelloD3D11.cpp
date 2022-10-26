@@ -8,6 +8,14 @@
 #include <d3dcompiler.h>
 #include <directxmath.h>
 #include "directxtex.h"
+#include <initguid.h>
+#include "IImageWrapper.h" 
+struct ImageFrame {
+    BYTE* pBuffer;
+    UINT unWidth;
+    UINT unHeight;
+    UINT unStride;
+};
 
 using namespace DirectX;
 //--------------------------------------------------------------------------------------
@@ -107,6 +115,40 @@ HRESULT             InitSkyboxShaders();
 void                CleanupIBL();
 
 
+// IBL, cubmap, skybox
+ID3DBlob* g_pCubeVSBlob = NULL;
+ID3D11VertexShader* g_pCubeVertexShader = NULL;
+ID3D11PixelShader* g_pCubePixelShader = NULL;
+ID3D11InputLayout* g_pCubeVertexLayout = NULL;
+ID3D11Buffer* g_pCubeVertexBuffer = NULL;
+ID3D11Buffer* g_pCubeIndexBuffer = NULL;
+ID3D11Buffer* g_pCubeConstBuffer = NULL;
+ID3D11Texture2D* g_pCubeTex = NULL;
+ID3D11ShaderResourceView* g_pCubeTexSR = NULL;
+ID3D11RenderTargetView* g_pCubeMapRTVs[6] = { NULL };
+ID3D11DepthStencilView* g_pCubeMapDSV = NULL;
+//ID3D11SamplerState*         g_pCubeSamplerLinear = NULL;
+
+ID3D11ShaderResourceView* g_pHDRTextureRV = NULL;    // for hdr texture 
+XMMATRIX                    g_CubeViews[6];
+XMMATRIX                    g_CubeProjection;
+
+ID3D11VertexShader* g_pSkyboxVertexShader = NULL;
+ID3D11PixelShader* g_pSkyboxPixelShader = NULL;
+ID3D11RasterizerState* g_pSkyboxRasterizerState = NULL;
+ID3D11DepthStencilState* g_pSkyboxDepthState = NULL;
+
+
+HRESULT InitHDRRenderTarget(UINT);
+HRESULT InitIBLShaders();
+HRESULT InitCubeVertex();
+HRESULT LoadHDRTexture();
+HRESULT InitIBLConstBuffer();
+HRESULT CreateSkyboxRasterState();
+void    DrawCubeMap(UINT);
+
+
+//------------------------------------------------------------------------------------
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPWSTR    lpCmdLine,
@@ -115,6 +157,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    HRESULT hr = CoInitialize(NULL);
 
     // Initialize global strings
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -134,7 +177,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UINT width = rc.right - rc.left;
     UINT height = rc.bottom - rc.top;
 
-    HRESULT hr = InitDevice(width, height);
+    hr = InitDevice(width, height);
     if (FAILED(hr))
     {
         CleanupDevice();
@@ -239,6 +282,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case WM_DESTROY:
         PostQuitMessage(0);
+        CleanupDevice();
         break;
     case WM_SIZE:
         //TODO: re-initialize the device? change viewport, projection
@@ -787,6 +831,7 @@ void RenderWorld()
     g_pImmediateContext->RSSetState(g_pRasterizerState);
 
     g_pImmediateContext->PSSetShaderResources(0, 1, &g_pTextureRV);
+
     g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
     g_pImmediateContext->DrawIndexed(36, 0, 0);
@@ -847,44 +892,14 @@ void CleanupDevice()
     if (g_pd3dDevice) g_pd3dDevice->Release();
 
     CleanupIBL();
+
+    CoUninitialize();
 }
 
-// IBL, cubmap, skybox
-ID3DBlob*                   g_pCubeVSBlob = NULL;
-ID3D11VertexShader*         g_pCubeVertexShader = NULL;
-ID3D11PixelShader*          g_pCubePixelShader = NULL;
-ID3D11InputLayout*          g_pCubeVertexLayout = NULL;
-ID3D11Buffer*               g_pCubeVertexBuffer = NULL;
-ID3D11Buffer*               g_pCubeIndexBuffer = NULL;
-ID3D11Buffer*               g_pCubeConstBuffer = NULL;
-ID3D11Texture2D*            g_pCubeTex = NULL;
-ID3D11ShaderResourceView*   g_pCubeTexSR = NULL;
-ID3D11RenderTargetView*     g_pCubeMapRTVs[6] = { NULL };
-ID3D11DepthStencilView*     g_pCubeMapDSV = NULL;
-//ID3D11SamplerState*         g_pCubeSamplerLinear = NULL;
-
-ID3D11ShaderResourceView*   g_pHDRTextureRV = NULL;    // for hdr texture 
-XMMATRIX                    g_CubeViews[6];
-XMMATRIX                    g_CubeProjection;
-
-ID3D11VertexShader*         g_pSkyboxVertexShader = NULL;
-ID3D11PixelShader*          g_pSkyboxPixelShader = NULL;
-ID3D11RasterizerState*      g_pSkyboxRasterizerState = NULL;
-ID3D11DepthStencilState*    g_pSkyboxDepthState = NULL;
-
-
-HRESULT InitHDRRenderTarget(UINT);
-HRESULT InitIBLShaders();
-HRESULT InitCubeVertex();
-HRESULT LoadHDRTexture();
-HRESULT InitIBLConstBuffer();
-HRESULT CreateSkyboxRasterState();
-void    DrawCubeMap(UINT);
-
+HRESULT LoadSkyboxImages(UINT);
 HRESULT InitIBL() 
 {
     HRESULT hr = S_OK;
-    UINT cubemapSize = 512;
 
     //step1: load HDR and convert to cubemap
     hr |= InitIBLShaders();
@@ -896,11 +911,147 @@ HRESULT InitIBL()
     if (FAILED(hr))
         return hr;
 
-    hr = InitHDRRenderTarget(cubemapSize);
+    UINT cubemapSize = 2048;
+    //test code
+    hr = LoadSkyboxImages(cubemapSize);
+    //hr = InitHDRRenderTarget(cubemapSize);
     if (SUCCEEDED(hr)) {
-        DrawCubeMap(cubemapSize);
+        //DrawCubeMap(cubemapSize);
     }
 
+    return hr;
+}
+
+void ReleaseImageBuffer(ImageFrame& currentImageFrame)
+{
+    if (currentImageFrame.pBuffer)
+        delete[] currentImageFrame.pBuffer;
+    currentImageFrame.pBuffer = NULL;
+    currentImageFrame.unWidth = 0;
+    currentImageFrame.unHeight = 0;
+    currentImageFrame.unStride = 0;
+}
+
+BOOL LoadImageFile(const wchar_t* pszFilePath, ImageFrame& newImageFrame)
+{
+    IImageWrapper* pImageWrapper = NULL;
+    HRESULT hr = CoCreateInstance(CLSID_IMAGE_WRAPPER, NULL, CLSCTX_INPROC_SERVER, IID_IMAGE_WRAPER, (void**)&pImageWrapper);
+    if (FAILED(hr))
+        return FALSE;
+
+    if (pImageWrapper) {
+        // enable AutoRotate.
+        IImageWrapperConfig* pConfig = NULL;
+        BOOL bAutoRotate = TRUE;
+        hr = pImageWrapper->QueryInterface(IID_IMAGE_WRAPERCONFIG, (void**)&pConfig);
+        if (pConfig)
+        {
+            hr = pConfig->SetConfig(IW_MODE_EnableAutoRotateByEXIF, &bAutoRotate);
+
+            // set Display mode.
+            IMAGEWRAPPER_DISPLAYMODE uMode = DM_LEFTONLY;
+            hr = pConfig->SetConfig(IW_MODE_DisplayMode, &uMode);
+
+            pConfig->Release();
+            pConfig = NULL;
+        }
+        //OutputDebugStringA("To get image Buffer\r\n");
+
+        hr = pImageWrapper->LoadImage((WCHAR*)pszFilePath);
+        //OutputDebugStringA("After get image Buffer\r\n");
+
+        UINT imgWidth = 0;
+        UINT imgHeight = 0;
+        pImageWrapper->GetImageWidth(&imgWidth);
+        pImageWrapper->GetImageHeight(&imgHeight);
+
+        /*char szBuffer[_MAX_PATH];
+        sprintf_s(szBuffer, "Now get image %d, %d\r\n", imgWidth, imgHeight);
+        OutputDebugStringA(szBuffer);*/
+        if (SUCCEEDED(hr) && imgWidth != 0 && imgHeight != 0)
+        {
+            size_t bufsize = (size_t)imgWidth * imgWidth * 4;
+            newImageFrame.unWidth = imgWidth;
+            newImageFrame.unHeight = imgHeight;
+            newImageFrame.unStride = imgWidth * 4;
+            newImageFrame.pBuffer = new BYTE[bufsize];
+            hr = pImageWrapper->GetFrame(newImageFrame.pBuffer, imgWidth, imgHeight, newImageFrame.unStride);
+            if (FAILED(hr))
+            {
+                delete[] newImageFrame.pBuffer;
+                newImageFrame.pBuffer = NULL;
+            }
+
+        }
+        else
+        {
+            hr = E_FAIL;
+        }
+
+        pImageWrapper->Release();
+    }
+
+    if (FAILED(hr))
+        return FALSE;
+
+    return TRUE;
+}
+
+HRESULT LoadSkyboxImages(UINT cubeMapSize)
+{
+    // create texture2d array for render targets (cube)
+    D3D11_TEXTURE2D_DESC cubeMapDesc;
+    //cubeMapDesc.Width = cubeMapSize;
+    //cubeMapDesc.Height = cubeMapSize;
+    cubeMapDesc.MipLevels = 1;      // 0, generate all mips
+    cubeMapDesc.ArraySize = 6;      // 6 faces for cubemap
+    cubeMapDesc.SampleDesc.Count = 1;
+    cubeMapDesc.SampleDesc.Quality = 0;
+    cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
+    cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    cubeMapDesc.CPUAccessFlags = 0;
+    cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC SMViewDesc;
+    SMViewDesc.Format = cubeMapDesc.Format;
+    SMViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+    SMViewDesc.TextureCube.MipLevels = -1;
+    SMViewDesc.TextureCube.MostDetailedMip = 0;
+
+    wchar_t cubeSrc[6][_MAX_PATH] = { L"skybox/right.jpg",
+                                      L"skybox/left.jpg",
+                                      L"skybox/top.jpg",
+                                      L"skybox/bottom.jpg",
+                                      L"skybox/front.jpg",
+                                      L"skybox/back.jpg" };
+
+    D3D11_SUBRESOURCE_DATA pData[6];
+    ImageFrame imgFrame[6];
+    for (int i = 0; i < 6; i++) {
+        if (!LoadImageFile(cubeSrc[i], imgFrame[i])) {
+            continue;
+        }
+        cubeMapDesc.Width = imgFrame[0].unWidth;
+        cubeMapDesc.Height = imgFrame[0].unHeight;
+        ZeroMemory(&pData[i], sizeof(pData[i]));
+        pData[i].pSysMem = imgFrame[i].pBuffer;
+        pData[i].SysMemPitch = imgFrame[0].unWidth * 4;
+        pData[i].SysMemSlicePitch = 0;
+    }
+
+    HRESULT hr = g_pd3dDevice->CreateTexture2D(&cubeMapDesc,
+                                               &pData[0],
+                                               &g_pCubeTex);
+    if (FAILED(hr))
+        return hr;
+
+    hr = g_pd3dDevice->CreateShaderResourceView(g_pCubeTex,
+                                                &SMViewDesc, 
+                                                &g_pCubeTexSR);
+    for (int i = 0; i < 6; i++) {
+        ReleaseImageBuffer(imgFrame[i]);
+    }
     return hr;
 }
 
@@ -1232,7 +1383,7 @@ HRESULT InitIBLConstBuffer()
     if (FAILED(hr))
         return hr;
 
-    // Initialize the camera view matrix
+    // Initialize the camera view matrix, 6 directions
     XMVECTOR Eye = XMVectorSet(0.f, 0.f, 0.f, 0.0f);
     XMVECTOR At[6] =
     {

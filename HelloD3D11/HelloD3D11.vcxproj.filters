@@ -27,6 +27,9 @@
     <ClInclude Include="HelloD3D11.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="IImageWrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="HelloD3D11.cpp">

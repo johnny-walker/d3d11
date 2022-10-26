@@ -131,8 +131,13 @@
     <PreBuildEvent>
       <Command>copy .\*.fx ..\x64\Debug
 copy .\*.dds ..\x64\Debug
-copy .\*.hdr ..\x64\Debug</Command>
+copy .\*.hdr ..\x64\Debug
+copy .\*.dll ..\x64\Debug
+copy .\*.manifest ..\x64\Debug</Command>
     </PreBuildEvent>
+    <Manifest>
+      <AdditionalManifestFiles>$(SolutionDir)$(Platform)\$(Configuration)\HelloD3D11.X.manifest</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -155,12 +160,18 @@ copy .\*.hdr ..\x64\Debug</Command>
     <PreBuildEvent>
       <Command>copy .\*.fx ..\x64\Release
 copy .\*.dds ..\x64\Release
-copy .\*.hdr ..\x64\Release</Command>
+copy .\*.hdr ..\x64\Release
+copy .\*.dll ..\x64\Release
+copy .\*.manifest ..\x64\Release</Command>
     </PreBuildEvent>
+    <Manifest>
+      <AdditionalManifestFiles>$(SolutionDir)$(Platform)\$(Configuration)\HelloD3D11.X.manifest</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="HelloD3D11.h" />
+    <ClInclude Include="IImageWrapper.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>

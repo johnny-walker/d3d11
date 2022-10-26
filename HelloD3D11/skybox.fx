@@ -64,11 +64,11 @@ float4 PS_SkyBox(SKYMAP_VS_OUTPUT input) : SV_Target
     //float3 envColor = float3(0.f, 1.f, 1.f);
     //return float4(envColor, 1.f);
 
-    float3 envColor = txCubeMap.SampleLevel(samLinear, input.texCoord, 0).rgb;
+    float3 envColor = txCubeMap.SampleLevel(samLinear, input.texCoord, 0).bgr;
 
     // HDR tonemap and gamma correct
-    envColor = envColor / (envColor + float3(1.f, 1.f, 1.f));
-    envColor = pow(envColor, float3(1.f/2.2, 1.f/2.2, 1.f/2.2));
+    //envColor = envColor / (envColor + float3(1.f, 1.f, 1.f));
+    //envColor = pow(envColor, float3(1.f/2.2, 1.f/2.2, 1.f/2.2));
 
     return float4(envColor, 1.f);
 }
