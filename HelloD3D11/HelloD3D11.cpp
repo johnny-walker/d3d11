@@ -116,27 +116,26 @@ void                CleanupIBL();
 
 
 // IBL, cubmap, skybox
-ID3DBlob* g_pCubeVSBlob = NULL;
-ID3D11VertexShader* g_pCubeVertexShader = NULL;
-ID3D11PixelShader* g_pCubePixelShader = NULL;
-ID3D11InputLayout* g_pCubeVertexLayout = NULL;
-ID3D11Buffer* g_pCubeVertexBuffer = NULL;
-ID3D11Buffer* g_pCubeIndexBuffer = NULL;
-ID3D11Buffer* g_pCubeConstBuffer = NULL;
-ID3D11Texture2D* g_pCubeTex = NULL;
-ID3D11ShaderResourceView* g_pCubeTexSR = NULL;
-ID3D11RenderTargetView* g_pCubeMapRTVs[6] = { NULL };
-ID3D11DepthStencilView* g_pCubeMapDSV = NULL;
-//ID3D11SamplerState*         g_pCubeSamplerLinear = NULL;
+ID3DBlob*                   g_pCubeVSBlob = NULL;
+ID3D11VertexShader*         g_pCubeVertexShader = NULL;
+ID3D11PixelShader*          g_pCubePixelShader = NULL;
+ID3D11InputLayout*          g_pCubeVertexLayout = NULL;
+ID3D11Buffer*               g_pCubeVertexBuffer = NULL;
+ID3D11Buffer*               g_pCubeIndexBuffer = NULL;
+ID3D11Buffer*               g_pCubeConstBuffer = NULL;
+ID3D11Texture2D*            g_pCubeTex = NULL;
+ID3D11ShaderResourceView*   g_pCubeTexSR = NULL;
+ID3D11RenderTargetView*     g_pCubeMapRTVs[6] = { NULL };
+ID3D11DepthStencilView*     g_pCubeMapDSV = NULL;
 
-ID3D11ShaderResourceView* g_pHDRTextureRV = NULL;    // for hdr texture 
+ID3D11ShaderResourceView*   g_pHDRTextureRV = NULL;    // for hdr texture 
 XMMATRIX                    g_CubeViews[6];
 XMMATRIX                    g_CubeProjection;
 
-ID3D11VertexShader* g_pSkyboxVertexShader = NULL;
-ID3D11PixelShader* g_pSkyboxPixelShader = NULL;
-ID3D11RasterizerState* g_pSkyboxRasterizerState = NULL;
-ID3D11DepthStencilState* g_pSkyboxDepthState = NULL;
+ID3D11VertexShader*         g_pSkyboxVertexShader = NULL;
+ID3D11PixelShader*          g_pSkyboxPixelShader = NULL;
+ID3D11RasterizerState*      g_pSkyboxRasterizerState = NULL;
+ID3D11DepthStencilState*    g_pSkyboxDepthState = NULL;
 
 
 HRESULT InitHDRRenderTarget(UINT);
@@ -682,14 +681,6 @@ HRESULT InitVertex()
     bd.CPUAccessFlags = 0;
     InitData.pSysMem = indices;
     hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pIndexBuffer);
-    if (FAILED(hr))
-        return hr;
-
-    // Set index buffer
-    //g_pImmediateContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-    // Set primitive topology
-    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     return hr;
 }
@@ -754,9 +745,9 @@ HRESULT InitConstBuffer(UINT width, UINT height)
         return hr;
 
     // Initialize the camera view matrix
-    XMVECTOR Eye = XMVectorSet(0.0f, 1.0f, -5.0f, 0.0f);
-    XMVECTOR At  = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-    XMVECTOR Up  = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    XMVECTOR Eye = XMVectorSet(0.f, 1.f, -5.f, 0.f);
+    XMVECTOR At  = XMVectorSet(0.f, 0.f,  0.f, 0.f);
+    XMVECTOR Up  = XMVectorSet(0.f, 1.f,  0.f, 0.f);
     g_View = XMMatrixLookAtLH(Eye, At, Up);
 
     // Initialize the projection matrix
@@ -826,6 +817,7 @@ void RenderWorld()
     g_pImmediateContext->VSSetShader(g_pVertexShader, NULL, 0);
     g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pImmediateContext->PSSetShader(g_pPixelShader, NULL, 0);
+
     g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
 
     g_pImmediateContext->RSSetState(g_pRasterizerState);
@@ -857,6 +849,7 @@ void RenderSkybox();
 void Render()
 {
     SetViewPort(g_width, g_height);
+    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
     
     // Clear the back buffer &  depth buffer
@@ -911,7 +904,7 @@ HRESULT InitIBL()
     if (FAILED(hr))
         return hr;
 
-    UINT cubemapSize = 2048;
+    UINT cubemapSize = 512;
     if (cubemapSize == 2048) {
         //test code
         hr = LoadSkyboxImages();
@@ -1047,8 +1040,8 @@ HRESULT LoadSkyboxImages()
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     srvDesc.Format = cubeMapDesc.Format;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-    srvDesc.TextureCube.MipLevels = -1;
-    srvDesc.TextureCube.MostDetailedMip = 0;
+    srvDesc.TextureCube.MipLevels = -1;         // -1, use all mips
+    srvDesc.TextureCube.MostDetailedMip = 0;    // finest mip = 0
 
     hr = g_pd3dDevice->CreateShaderResourceView(g_pCubeTex,
                                                 &srvDesc,
@@ -1060,14 +1053,14 @@ HRESULT LoadSkyboxImages()
 }
 
 // https://blog.csdn.net/BonChoix/article/details/8606355
-HRESULT InitHDRRenderTarget(UINT cubeMapSize)
+HRESULT InitHDRRenderTarget(UINT cubeSize)
 {
     HRESULT hr = S_OK;
 
     // create texture2d array for render targets (cube)
     D3D11_TEXTURE2D_DESC cubeMapDesc;
-    //cubeMapDesc.Width = 0;
-    //cubeMapDesc.Height = 0;
+    cubeMapDesc.Width = cubeSize;
+    cubeMapDesc.Height = cubeSize;
     cubeMapDesc.MipLevels = 0;          // 0, generate all mips
     cubeMapDesc.ArraySize = 6;          // 6 faces for cubemap
     cubeMapDesc.SampleDesc.Count = 1;
@@ -1078,25 +1071,30 @@ HRESULT InitHDRRenderTarget(UINT cubeMapSize)
     cubeMapDesc.CPUAccessFlags = 0;
     cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS | D3D11_RESOURCE_MISC_TEXTURECUBE;
 
-    hr = g_pd3dDevice->CreateTexture2D(&cubeMapDesc, 0, &g_pCubeTex);
+    hr = g_pd3dDevice->CreateTexture2D(&cubeMapDesc, 
+                                       0, 
+                                       &g_pCubeTex);
     if (FAILED(hr))
         return hr;
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     srvDesc.Format = cubeMapDesc.Format;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-    srvDesc.TextureCube.MipLevels = -1;
-    srvDesc.TextureCube.MostDetailedMip = 0;
-    g_pd3dDevice->CreateShaderResourceView(g_pCubeTex, &srvDesc, &g_pCubeTexSR);
+    srvDesc.TextureCube.MipLevels = -1;         // -1, use all mips
+    srvDesc.TextureCube.MostDetailedMip = 0;    // finest mip = 0
+
+    g_pd3dDevice->CreateShaderResourceView(g_pCubeTex, 
+                                           &srvDesc, 
+                                           &g_pCubeTexSR);
     if (FAILED(hr))
         return hr;
 
-    // create render target views for all cube map faces
+    // create render target views to draw all cube map faces
     D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
     rtvDesc.Format = cubeMapDesc.Format;
     rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-    rtvDesc.Texture2DArray.MipSlice = 0;
     rtvDesc.Texture2DArray.ArraySize = 1;
+    rtvDesc.Texture2DArray.MipSlice = 0;
     for (int i = 0; i < 6; i++) {
         rtvDesc.Texture2DArray.FirstArraySlice = i;
         hr = g_pd3dDevice->CreateRenderTargetView(g_pCubeTex,
@@ -1108,8 +1106,8 @@ HRESULT InitHDRRenderTarget(UINT cubeMapSize)
 
     // create depth buffer
     D3D11_TEXTURE2D_DESC depthTexDesc;
-    depthTexDesc.Width = cubeMapSize;
-    depthTexDesc.Height = cubeMapSize;
+    depthTexDesc.Width = cubeSize;
+    depthTexDesc.Height = cubeSize;
     depthTexDesc.MipLevels = 1;
     depthTexDesc.ArraySize = 1;
     depthTexDesc.SampleDesc.Count = 1;
@@ -1119,8 +1117,11 @@ HRESULT InitHDRRenderTarget(UINT cubeMapSize)
     depthTexDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
     depthTexDesc.CPUAccessFlags = 0;
     depthTexDesc.MiscFlags = 0;
+
     ID3D11Texture2D* depthTex = 0;
-    hr = g_pd3dDevice->CreateTexture2D(&depthTexDesc, 0, &depthTex);
+    hr = g_pd3dDevice->CreateTexture2D(&depthTexDesc, 
+                                       0, 
+                                       &depthTex);
     if (FAILED(hr))
         return hr;
 
@@ -1243,8 +1244,6 @@ HRESULT InitCubeVertex() {
     if (FAILED(hr))
         return hr;
 
-    //g_pImmediateContext->IASetInputLayout(g_pCubeVertexLayout);
-
     // Set vertex buffer (clockwise)
     CubeVertex vertices[24] =
     {
@@ -1294,11 +1293,6 @@ HRESULT InitCubeVertex() {
     if (FAILED(hr))
         return hr;
 
-
-    //UINT stride = sizeof(CubeVertex);
-    //UINT offset = 0;
-    //g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
-
     // Set index buffer
     WORD indices[] =
     { 
@@ -1318,13 +1312,6 @@ HRESULT InitCubeVertex() {
     bd.CPUAccessFlags = 0;
     InitData.pSysMem = indices;
     hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pCubeIndexBuffer);
-    if (FAILED(hr))
-        return hr;
-
-    //g_pImmediateContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-    // Set primitive topology
-    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     return hr;
 }
@@ -1341,7 +1328,6 @@ HRESULT LoadHDRTexture()
     hr = LoadFromHDRFile(filepath,
                          &md,
                          img);
-
     if (FAILED(hr))
         return hr;
 
@@ -1354,21 +1340,6 @@ HRESULT LoadHDRTexture()
         return hr;
 
     hr = CreateSamplerLinear();
-    // Create the sample state
-    /*
-    D3D11_SAMPLER_DESC sampDesc;
-    ZeroMemory(&sampDesc, sizeof(sampDesc));
-    sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-    sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-    sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-    sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    sampDesc.MinLOD = 0;
-    sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
-    hr = g_pd3dDevice->CreateSamplerState(&sampDesc, &g_pCubeSamplerLinear);
-    if (FAILED(hr))
-        return hr;
-    */
     return hr;
 }
 
@@ -1414,7 +1385,7 @@ HRESULT InitIBLConstBuffer()
     float aspect_ratio = 1.f;
     g_CubeProjection = XMMatrixPerspectiveFovLH(XM_PIDIV2, aspect_ratio, 0.01f, 100.f);
 
-    return S_OK;
+    return hr;
 }
 
 void CreateSkyboxDepthStencilState()
@@ -1453,6 +1424,8 @@ void RenderCube(UINT);
 void DrawCubeMap(UINT cubeMapSize)
 {
     SetViewPort(cubeMapSize, cubeMapSize);
+    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 
     UINT stride = sizeof(CubeVertex);
     UINT offset = 0;    
@@ -1479,14 +1452,14 @@ void RenderCube(UINT face)
 {
     // Clear cube map face and depth buffer.
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red, green, blue, alpha
+    float ClearColor[4] = { 0.f, 1.f, 0.f, 1.f }; // red, green, blue, alpha
     g_pImmediateContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
     g_pImmediateContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 
     // Bind cube map face as render target.
-    ID3D11RenderTargetView** renderTargets;
-    renderTargets = &g_pCubeMapRTVs[face];
-    g_pImmediateContext->OMSetRenderTargets(1, renderTargets, g_pCubeMapDSV);
+    //ID3D11RenderTargetView** renderTargets;
+    //renderTargets = &g_pCubeMapRTVs[face];
+    g_pImmediateContext->OMSetRenderTargets(1, &g_pCubeMapRTVs[face], g_pCubeMapDSV);
 
     XMMATRIX world = XMMatrixIdentity();
 
@@ -1494,8 +1467,9 @@ void RenderCube(UINT face)
     cb.mWorld = XMMatrixTranspose(world);
     cb.mView = XMMatrixTranspose(g_CubeViews[face]);
     cb.mProjection = XMMatrixTranspose(g_CubeProjection);
-
     g_pImmediateContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
+
+    g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pImmediateContext->DrawIndexed(36, 0, 0);
 }
 
@@ -1533,7 +1507,6 @@ void RenderSkybox()
 
 void CleanupIBL()
 {
-    //if (g_pCubeSamplerLinear) g_pCubeSamplerLinear->Release();
     if (g_pHDRTextureRV) g_pHDRTextureRV->Release();
     if (g_pCubeConstBuffer) g_pCubeConstBuffer->Release();
     if (g_pCubeVertexBuffer) g_pCubeVertexBuffer->Release();
