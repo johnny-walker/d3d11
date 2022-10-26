@@ -896,7 +896,7 @@ void CleanupDevice()
     CoUninitialize();
 }
 
-HRESULT LoadSkyboxImages(UINT);
+HRESULT LoadSkyboxImages();
 HRESULT InitIBL() 
 {
     HRESULT hr = S_OK;
@@ -912,11 +912,14 @@ HRESULT InitIBL()
         return hr;
 
     UINT cubemapSize = 2048;
-    //test code
-    hr = LoadSkyboxImages(cubemapSize);
-    //hr = InitHDRRenderTarget(cubemapSize);
-    if (SUCCEEDED(hr)) {
-        //DrawCubeMap(cubemapSize);
+    if (cubemapSize == 2048) {
+        //test code
+        hr = LoadSkyboxImages();
+    } else {
+        hr = InitHDRRenderTarget(cubemapSize);
+        if (SUCCEEDED(hr)) {
+            DrawCubeMap(cubemapSize);
+        }
     }
 
     return hr;
@@ -997,12 +1000,12 @@ BOOL LoadImageFile(const wchar_t* pszFilePath, ImageFrame& newImageFrame)
     return TRUE;
 }
 
-HRESULT LoadSkyboxImages(UINT cubeMapSize)
+HRESULT LoadSkyboxImages()
 {
     // create texture2d array for render targets (cube)
     D3D11_TEXTURE2D_DESC cubeMapDesc;
-    //cubeMapDesc.Width = cubeMapSize;
-    //cubeMapDesc.Height = cubeMapSize;
+    //cubeMapDesc.Width = 0;
+    //cubeMapDesc.Height = 0;
     cubeMapDesc.MipLevels = 1;      // 0, generate all mips
     cubeMapDesc.ArraySize = 6;      // 6 faces for cubemap
     cubeMapDesc.SampleDesc.Count = 1;
@@ -1011,13 +1014,13 @@ HRESULT LoadSkyboxImages(UINT cubeMapSize)
     cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
     cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     cubeMapDesc.CPUAccessFlags = 0;
-    cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+    cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS | D3D11_RESOURCE_MISC_TEXTURECUBE;
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC SMViewDesc;
-    SMViewDesc.Format = cubeMapDesc.Format;
-    SMViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-    SMViewDesc.TextureCube.MipLevels = -1;
-    SMViewDesc.TextureCube.MostDetailedMip = 0;
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    srvDesc.Format = cubeMapDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+    srvDesc.TextureCube.MipLevels = -1;
+    srvDesc.TextureCube.MostDetailedMip = 0;
 
     wchar_t cubeSrc[6][_MAX_PATH] = { L"skybox/right.jpg",
                                       L"skybox/left.jpg",
@@ -1030,6 +1033,7 @@ HRESULT LoadSkyboxImages(UINT cubeMapSize)
     ImageFrame imgFrame[6];
     for (int i = 0; i < 6; i++) {
         if (!LoadImageFile(cubeSrc[i], imgFrame[i])) {
+            OutputDebugStringA("Error: File not found\r\n");
             continue;
         }
         cubeMapDesc.Width = imgFrame[0].unWidth;
@@ -1047,7 +1051,7 @@ HRESULT LoadSkyboxImages(UINT cubeMapSize)
         return hr;
 
     hr = g_pd3dDevice->CreateShaderResourceView(g_pCubeTex,
-                                                &SMViewDesc, 
+                                                &srvDesc,
                                                 &g_pCubeTexSR);
     for (int i = 0; i < 6; i++) {
         ReleaseImageBuffer(imgFrame[i]);
