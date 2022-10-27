@@ -1324,12 +1324,14 @@ HRESULT LoadHDRTexture()
     // Load the Texture
     DirectX::TexMetadata md;
     DirectX::ScratchImage img;
-    WCHAR filepath[] = L"newport_loft.hdr";
+    WCHAR filepath[] = L"sunset_1k.hdr";
     hr = LoadFromHDRFile(filepath,
                          &md,
                          img);
-    if (FAILED(hr))
+    if (FAILED(hr)) {
+        OutputDebugStringA("Error: File not found\r\n");
         return hr;
+    }
 
     hr = CreateShaderResourceView(g_pd3dDevice,
                                   img.GetImages(),
@@ -1406,8 +1408,10 @@ HRESULT CreateSkyboxRasterState()
 
     D3D11_RASTERIZER_DESC RSState;
     RSState.FillMode = D3D11_FILL_SOLID;
+    //RSState.FillMode = D3D11_FILL_WIREFRAME;
     RSState.CullMode = D3D11_CULL_BACK;
-    RSState.FrontCounterClockwise = TRUE;
+    //RSState.CullMode = D3D11_CULL_NONE;
+    RSState.FrontCounterClockwise = true;
     RSState.DepthBias = 0;
     RSState.DepthBiasClamp = 0.0f;
     RSState.SlopeScaledDepthBias = 0.0f;
@@ -1442,6 +1446,8 @@ void DrawCubeMap(UINT cubeMapSize)
     g_pImmediateContext->PSSetShaderResources(0, 1, &g_pHDRTextureRV);
     g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
+    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, D3D11_CULL_BACK
+
     for (int i = 0; i < 6; ++i)  {
         RenderCube(i);
     }
@@ -1452,7 +1458,7 @@ void RenderCube(UINT face)
 {
     // Clear cube map face and depth buffer.
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.f, 1.f, 0.f, 1.f }; // red, green, blue, alpha
+    float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red, green, blue, alpha
     g_pImmediateContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
     g_pImmediateContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 
@@ -1468,8 +1474,6 @@ void RenderCube(UINT face)
     cb.mView = XMMatrixTranspose(g_CubeViews[face]);
     cb.mProjection = XMMatrixTranspose(g_CubeProjection);
     g_pImmediateContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
-
-    g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pImmediateContext->DrawIndexed(36, 0, 0);
 }
 
@@ -1493,8 +1497,8 @@ void RenderSkybox()
     g_pImmediateContext->VSSetShader(g_pSkyboxVertexShader, NULL, 0);
     g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
 
-    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);
-    g_pImmediateContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have
+    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);  //must-have, counter_clockwise CULL_BACK
+    g_pImmediateContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have, LESS_EQUAL
 
     g_pImmediateContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
 

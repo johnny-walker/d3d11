@@ -54,8 +54,6 @@ float2 SampleSphericalMap(float3 v)
 
 float4 PS_Cubmap(PS_INPUT input) : SV_Target
 {
-    return float4(1.f, 0.f, 0.f, 1.f);
-
     float3 nrmlPos = normalize(input.Pos.xyz);
     float2 uv = SampleSphericalMap(nrmlPos);
     float3 color = txHdrMap.Sample(samLinear, uv).rgb;
