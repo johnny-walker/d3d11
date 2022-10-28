@@ -138,8 +138,12 @@ ID3D11RasterizerState*      g_pSkyboxRasterizerState = NULL;
 ID3D11DepthStencilState*    g_pSkyboxDepthState = NULL;
 
 
+ID3D11VertexShader*         g_pIrrVertexShader = NULL;
+ID3D11PixelShader*          g_pIrrPixelShader = NULL;
+
 HRESULT InitHDRRenderTarget(UINT);
 HRESULT InitIBLShaders();
+HRESULT InitIrrConvShaders();
 HRESULT InitCubeVertex();
 HRESULT LoadHDRTexture();
 HRESULT InitIBLConstBuffer();
@@ -883,6 +887,7 @@ HRESULT InitIBL()
     //step1: load HDR and convert to cubemap
     hr |= InitIBLShaders();
     hr |= InitCubeVertex();
+    hr |= InitIrrConvShaders();
     hr |= LoadHDRTexture();
     hr |= InitIBLConstBuffer();
     hr |= CreateSkyboxRasterState();
@@ -1044,8 +1049,8 @@ HRESULT InitHDRRenderTarget(UINT cubeSize)
     cubeMapDesc.ArraySize = 6;          // 6 faces for cubemap
     cubeMapDesc.SampleDesc.Count = 1;
     cubeMapDesc.SampleDesc.Quality = 0;
-    cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    //cubeMapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    //cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    cubeMapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
     cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     cubeMapDesc.CPUAccessFlags = 0;
@@ -1160,12 +1165,56 @@ HRESULT InitIBLShaders()
     return hr;
 }
 
+HRESULT InitIrrConvShaders()
+{
+    HRESULT hr = S_OK;
+
+    // Compile the vertex shader
+    ID3DBlob* pVSBlob = NULL;
+    hr = CompileShaderFromFile(L"irradiance.fx", "VS_IrrConv", "vs_4_0", &pVSBlob);
+    if (FAILED(hr)) {
+        MessageBox(NULL,
+            L"The VS FX file cannot be compiled.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK);
+        return hr;
+    }
+
+    // Create the vertex shader
+    hr = g_pd3dDevice->CreateVertexShader(pVSBlob->GetBufferPointer(),
+                                          pVSBlob->GetBufferSize(),
+                                          NULL,
+                                          &g_pIrrVertexShader);
+    pVSBlob->Release();
+    if (FAILED(hr)) {
+        return hr;
+    }
+
+    // Compile the pixel shader (PS)
+    ID3DBlob* pPSBlob = NULL;
+    hr = CompileShaderFromFile(L"irradiance.fx", "PS_IrrConv", "ps_4_0", &pPSBlob);
+    if (FAILED(hr))
+    {
+        MessageBox(NULL,
+            L"The PS FX file cannot be compiled.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK);
+        return hr;
+    }
+
+    // Create the pixel shader (PS)
+    hr = g_pd3dDevice->CreatePixelShader(pPSBlob->GetBufferPointer(),
+                                         pPSBlob->GetBufferSize(),
+                                         NULL,
+                                         &g_pIrrPixelShader);
+    pPSBlob->Release();
+
+    return hr;
+}
+
 HRESULT InitSkyboxShaders()
 {
     HRESULT hr = S_OK;
 
     // Compile the vertex shader
-    hr = CompileShaderFromFile(L"skybox.fx", "VS_SkyBox", "vs_4_0", &g_pCubeVSBlob);
+    ID3DBlob* pVSBlob = NULL;
+    hr = CompileShaderFromFile(L"skybox.fx", "VS_SkyBox", "vs_4_0", &pVSBlob);
     if (FAILED(hr))
     {
         MessageBox(NULL,
@@ -1174,12 +1223,12 @@ HRESULT InitSkyboxShaders()
     }
 
     // Create the vertex shader
-    hr = g_pd3dDevice->CreateVertexShader(g_pCubeVSBlob->GetBufferPointer(),
-                                          g_pCubeVSBlob->GetBufferSize(),
+    hr = g_pd3dDevice->CreateVertexShader(pVSBlob->GetBufferPointer(),
+                                          pVSBlob->GetBufferSize(),
                                           NULL,
                                           &g_pSkyboxVertexShader);
+    pVSBlob->Release();
     if (FAILED(hr)) {
-        g_pCubeVSBlob->Release();
         return hr;
     }
 
