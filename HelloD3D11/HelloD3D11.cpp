@@ -599,10 +599,6 @@ HRESULT InitVertex()
     if (FAILED(hr))
         return hr;
 
-    // Set the input layout 
-    //g_pImmediateContext->IASetInputLayout(g_pVertexLayout);
-
-
     // Create vertex buffer (VBO)
     SimpleVertex vertices[] =
     {
@@ -651,11 +647,6 @@ HRESULT InitVertex()
     hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pVertexBuffer);
     if (FAILED(hr))
         return hr;
-
-    // Set vertex buffer
-    //UINT stride = sizeof(SimpleVertex);
-    //UINT offset = 0;
-    //g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
 
     // Create index buffer, 6 faces
     WORD indices[] =
@@ -745,7 +736,7 @@ HRESULT InitConstBuffer(UINT width, UINT height)
         return hr;
 
     // Initialize the camera view matrix
-    XMVECTOR Eye = XMVectorSet(0.f, 1.f, -5.f, 0.f);
+    XMVECTOR Eye = XMVectorSet(0.f, -3.f, -5.f, 0.f);
     XMVECTOR At  = XMVectorSet(0.f, 0.f,  0.f, 0.f);
     XMVECTOR Up  = XMVectorSet(0.f, 1.f,  0.f, 0.f);
     g_View = XMMatrixLookAtLH(Eye, At, Up);
@@ -817,22 +808,17 @@ void RenderWorld()
     g_pImmediateContext->VSSetShader(g_pVertexShader, NULL, 0);
     g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pImmediateContext->PSSetShader(g_pPixelShader, NULL, 0);
-
     g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-
     g_pImmediateContext->RSSetState(g_pRasterizerState);
-
     g_pImmediateContext->PSSetShaderResources(0, 1, &g_pTextureRV);
-
     g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
-
     g_pImmediateContext->DrawIndexed(36, 0, 0);
 
     // Render each light
     for (int m = 0; m < 2; m++)
     {
         XMMATRIX mLight = XMMatrixTranslationFromVector(5.0f * XMLoadFloat4(&vLightDirs[m]));
-        XMMATRIX mLightScale = XMMatrixScaling(0.05f, 0.1f, 0.1f);
+        XMMATRIX mLightScale = XMMatrixScaling(0.05f, 0.05f, 0.05f);
         mLight = mLightScale * mLight;
 
         // Update the world variable to reflect the current light
@@ -858,7 +844,7 @@ void Render()
     g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-    RenderWorld();
+    //RenderWorld();
 
     // Present our back buffer to our front buffer
     g_pSwapChain->Present(0, 0);
@@ -1066,6 +1052,7 @@ HRESULT InitHDRRenderTarget(UINT cubeSize)
     cubeMapDesc.SampleDesc.Count = 1;
     cubeMapDesc.SampleDesc.Quality = 0;
     cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    //cubeMapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
     cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
     cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     cubeMapDesc.CPUAccessFlags = 0;
@@ -1247,34 +1234,35 @@ HRESULT InitCubeVertex() {
     // Set vertex buffer (clockwise)
     CubeVertex vertices[24] =
     {
-        { XMFLOAT3(-1.f,  1.f, -1.f)},
-        { XMFLOAT3(1.f,  1.f, -1.f)},
-        { XMFLOAT3(1.f, -1.f, -1.f)},
-        { XMFLOAT3(-1.f, -1.f, -1.f)},
-
+        // X+
         { XMFLOAT3(1.f,  1.f, -1.f)},
         { XMFLOAT3(1.f,  1.f,  1.f)},
         { XMFLOAT3(1.f, -1.f,  1.f)},
         { XMFLOAT3(1.f, -1.f, -1.f)},
-
-        { XMFLOAT3(1.f,  1.f,  1.f)},
-        { XMFLOAT3(-1.f,  1.f,  1.f)},
-        { XMFLOAT3(-1.f, -1.f,  1.f)},
-        { XMFLOAT3(1.f, -1.f,  1.f)},
-
+        // X-
         { XMFLOAT3(-1.f,  1.f, 1.f)},
         { XMFLOAT3(-1.f,  1.f, -1.f)},
         { XMFLOAT3(-1.f, -1.f, -1.f)},
         { XMFLOAT3(-1.f, -1.f, 1.f)},
-
+        // Y+
         { XMFLOAT3(-1.f,  1.f, 1.f)},
         { XMFLOAT3(1.f,  1.f, 1.f)},
         { XMFLOAT3(1.f,  1.f, -1.f)},
         { XMFLOAT3(-1.f, 1.f, -1.f)},
-
+        // Y-
         { XMFLOAT3(1.f, -1.f, -1.f)},
         { XMFLOAT3(1.f, -1.f,  1.f)},
         { XMFLOAT3(-1.f, -1.f, 1.f)},
+        { XMFLOAT3(-1.f, -1.f, -1.f)},
+        // Z+
+        { XMFLOAT3(1.f,  1.f,  1.f)},
+        { XMFLOAT3(-1.f,  1.f,  1.f)},
+        { XMFLOAT3(-1.f, -1.f,  1.f)},
+        { XMFLOAT3(1.f, -1.f,  1.f)},
+        // Z-
+        { XMFLOAT3(-1.f,  1.f, -1.f)},
+        { XMFLOAT3(1.f,  1.f, -1.f)},
+        { XMFLOAT3(1.f, -1.f, -1.f)},
         { XMFLOAT3(-1.f, -1.f, -1.f)},
     };
 
@@ -1324,7 +1312,8 @@ HRESULT LoadHDRTexture()
     // Load the Texture
     DirectX::TexMetadata md;
     DirectX::ScratchImage img;
-    WCHAR filepath[] = L"sunset_1k.hdr";
+    //WCHAR filepath[] = L"sunset_1k.hdr";
+    WCHAR filepath[] = L"newport_loft.hdr";
     hr = LoadFromHDRFile(filepath,
                          &md,
                          img);
@@ -1360,23 +1349,24 @@ HRESULT InitIBLConstBuffer()
         return hr;
 
     // Initialize the camera view matrix, 6 directions
-    XMVECTOR Eye = XMVectorSet(0.f, 0.f, 0.f, 0.0f);
+    // HDR environment map needs to flip source
+    XMVECTOR Eye = XMVectorSet(0.f, 0.f, 0.f, 0.f);
     XMVECTOR At[6] =
     {
         XMVectorSet( 1.f,  0.f,  0.f, 0.f),     // +X
         XMVectorSet(-1.f,  0.f,  0.f, 0.f),     // -X
-        XMVectorSet( 0.f,  1.f,  0.f, 0.f),     // +Y
-        XMVectorSet( 0.f, -1.f,  0.f, 0.f),     // -Y
+        XMVectorSet( 0.f,  -1.f,  0.f, 0.f),     // +Y
+        XMVectorSet( 0.f, 1.f,  0.f, 0.f),     // -Y
         XMVectorSet( 0.f,  0.f,  1.f, 0.f),     // +Z
         XMVectorSet( 0.f,  0.f, -1.f, 0.f)      // -Z
     };
     XMVECTOR Up[6] =
     {
-        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // +X
-        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // -X
-        XMVectorSet(0.f, 0.f, -1.f, 0.f),       // +Y
-        XMVectorSet(0.f, 0.f,  1.f, 0.f),       // -Y
-        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // +Z
+        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // +X
+        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // -X
+        XMVectorSet(0.f, 0.f, 1.f, 0.f),       // +Y
+        XMVectorSet(0.f, 0.f,  -1.f, 0.f),       // -Y
+        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // +Z
         XMVectorSet(0.f, 1.f,  0.f, 0.f)        // -Z
     };
     for (int i = 0; i < 6; i++) {
@@ -1446,7 +1436,7 @@ void DrawCubeMap(UINT cubeMapSize)
     g_pImmediateContext->PSSetShaderResources(0, 1, &g_pHDRTextureRV);
     g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
-    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, D3D11_CULL_BACK
+    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, counter clockwise CULL_BACK
 
     for (int i = 0; i < 6; ++i)  {
         RenderCube(i);
@@ -1454,6 +1444,7 @@ void DrawCubeMap(UINT cubeMapSize)
     g_pImmediateContext->GenerateMips(g_pCubeTexSR);
 }
 
+// draw HDR color onto cubemap's 6 faces
 void RenderCube(UINT face)
 {
     // Clear cube map face and depth buffer.

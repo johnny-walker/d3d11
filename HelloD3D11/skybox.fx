@@ -25,7 +25,7 @@ struct SKYMAP_INPUT
 
 struct SKYMAP_VS_OUTPUT    //output structure for skymap vertex shader
 {
-    float4 Pos : SV_POSITION;
+    float4 Pos      : SV_POSITION;
     float3 texCoord : TEXCOORD;
 };
 
@@ -61,6 +61,7 @@ SKYMAP_VS_OUTPUT VS_SkyBox(SKYMAP_INPUT input )
 //--------------------------------------------------------------------------------------
 float4 PS_SkyBox(SKYMAP_VS_OUTPUT input) : SV_Target
 {
+    //return float4(0.f, 0.f, 1.f, 1.f);
     float3 envColor = txCubeMap.SampleLevel(samLinear, input.texCoord, 0).rgb;
 
     // HDR tonemap and gamma correct

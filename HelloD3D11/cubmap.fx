@@ -15,27 +15,28 @@ cbuffer ConstCubeBuffer : register( b0 )
 }
 
 //--------------------------------------------------------------------------------------
-struct VS_INPUT
+struct SKYMAP_INPUT
 {
     float4 Pos : POSITION;
 };
 
-struct PS_INPUT
+struct SKYMAP_VS_OUTPUT    //output structure for skymap vertex shader
 {
-    float4 Pos : SV_POSITION;
+    float4 Pos      : SV_POSITION;
+    float3 texCoord : TEXCOORD;
 };
 
 
 //--------------------------------------------------------------------------------------
 // Vertex Shader: VS_Cubemap
 //--------------------------------------------------------------------------------------
-PS_INPUT VS_Cubemap( VS_INPUT input )
+SKYMAP_VS_OUTPUT VS_Cubemap(SKYMAP_INPUT input )
 {
-    PS_INPUT output = (PS_INPUT)0;
-    output.Pos = mul( input.Pos, World );
-    output.Pos = mul( output.Pos, View );
+    SKYMAP_VS_OUTPUT output = (SKYMAP_VS_OUTPUT)0;
+    output.Pos = mul( input.Pos, View);
     output.Pos = mul( output.Pos, Projection );
 
+    output.texCoord = input.Pos;
     return output;
 }
 
@@ -52,9 +53,9 @@ float2 SampleSphericalMap(float3 v)
     return uv;
 }
 
-float4 PS_Cubmap(PS_INPUT input) : SV_Target
+float4 PS_Cubmap(SKYMAP_VS_OUTPUT input) : SV_Target
 {
-    float3 nrmlPos = normalize(input.Pos.xyz);
+    float3 nrmlPos = normalize(input.texCoord.xyz);
     float2 uv = SampleSphericalMap(nrmlPos);
     float3 color = txHdrMap.Sample(samLinear, uv).rgb;
     return float4(color, 1.f);
