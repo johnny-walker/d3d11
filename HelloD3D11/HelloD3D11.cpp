@@ -124,7 +124,7 @@ ID3D11Buffer*               g_pCubeVertexBuffer = NULL;
 ID3D11Buffer*               g_pCubeIndexBuffer = NULL;
 ID3D11Buffer*               g_pCubeConstBuffer = NULL;
 ID3D11Texture2D*            g_pCubeTex = NULL;
-ID3D11ShaderResourceView*   g_pCubeTexSR = NULL;
+ID3D11ShaderResourceView*   g_pCubeTexSR = NULL;            // from HDR
 ID3D11RenderTargetView*     g_pCubeMapRTVs[6] = { NULL };
 ID3D11DepthStencilView*     g_pCubeMapDSV = NULL;
 
@@ -1037,6 +1037,7 @@ HRESULT LoadSkyboxImages()
 }
 
 // https://blog.csdn.net/BonChoix/article/details/8606355
+// project HDR source to g_pCubeTexSR (512x512x6)
 HRESULT InitHDRRenderTarget(UINT cubeSize)
 {
     HRESULT hr = S_OK;
@@ -1122,6 +1123,7 @@ HRESULT InitHDRRenderTarget(UINT cubeSize)
     depthTex->Release();
     return hr;
 }
+
 
 HRESULT InitIBLShaders()
 {
