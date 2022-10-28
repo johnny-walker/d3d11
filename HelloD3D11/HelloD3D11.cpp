@@ -736,7 +736,7 @@ HRESULT InitConstBuffer(UINT width, UINT height)
         return hr;
 
     // Initialize the camera view matrix
-    XMVECTOR Eye = XMVectorSet(0.f, -3.f, -5.f, 0.f);
+    XMVECTOR Eye = XMVectorSet(5.f, 2.f, 0.f, 0.f);
     XMVECTOR At  = XMVectorSet(0.f, 0.f,  0.f, 0.f);
     XMVECTOR Up  = XMVectorSet(0.f, 1.f,  0.f, 0.f);
     g_View = XMMatrixLookAtLH(Eye, At, Up);
@@ -844,7 +844,7 @@ void Render()
     g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-    //RenderWorld();
+    RenderWorld();
 
     // Present our back buffer to our front buffer
     g_pSwapChain->Present(0, 0);
@@ -1297,7 +1297,7 @@ HRESULT InitCubeVertex() {
     return hr;
 }
 
-
+//https://zhuanlan.zhihu.com/p/426568617
 HRESULT LoadHDRTexture()
 {
     HRESULT hr = S_OK;
@@ -1315,20 +1315,20 @@ HRESULT LoadHDRTexture()
         return hr;
     }
     // HDR map origin is upper-left, needs to flip source
-    ScratchImage destImage;
+    ScratchImage dstImg;
     hr = FlipRotate(img.GetImages(), 
                     img.GetImageCount(),
                     img.GetMetadata(),
-                    TEX_FR_FLIP_HORIZONTAL, 
-                    destImage);
+                    TEX_FR_FLIP_VERTICAL, 
+                    dstImg);
     if (FAILED(hr)) {
         OutputDebugStringA("Error: Failed to flip image\r\n");
         return hr;
     }
 
     hr = CreateShaderResourceView(g_pd3dDevice,
-                                  destImage.GetImages(),
-                                  destImage.GetImageCount(),
+                                  dstImg.GetImages(),
+                                  dstImg.GetImageCount(),
                                   md,
                                   &g_pHDRTextureRV);
     if (FAILED(hr))
