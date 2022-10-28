@@ -926,8 +926,7 @@ BOOL LoadImageFile(const wchar_t* pszFilePath, ImageFrame& newImageFrame)
         IImageWrapperConfig* pConfig = NULL;
         BOOL bAutoRotate = TRUE;
         hr = pImageWrapper->QueryInterface(IID_IMAGE_WRAPERCONFIG, (void**)&pConfig);
-        if (pConfig)
-        {
+        if (pConfig) {
             hr = pConfig->SetConfig(IW_MODE_EnableAutoRotateByEXIF, &bAutoRotate);
 
             // set Display mode.
@@ -950,26 +949,20 @@ BOOL LoadImageFile(const wchar_t* pszFilePath, ImageFrame& newImageFrame)
         /*char szBuffer[_MAX_PATH];
         sprintf_s(szBuffer, "Now get image %d, %d\r\n", imgWidth, imgHeight);
         OutputDebugStringA(szBuffer);*/
-        if (SUCCEEDED(hr) && imgWidth != 0 && imgHeight != 0)
-        {
+        if (SUCCEEDED(hr) && imgWidth != 0 && imgHeight != 0) {
             size_t bufsize = (size_t)imgWidth * imgWidth * 4;
             newImageFrame.unWidth = imgWidth;
             newImageFrame.unHeight = imgHeight;
             newImageFrame.unStride = imgWidth * 4;
             newImageFrame.pBuffer = new BYTE[bufsize];
             hr = pImageWrapper->GetFrame(newImageFrame.pBuffer, imgWidth, imgHeight, newImageFrame.unStride);
-            if (FAILED(hr))
-            {
+            if (FAILED(hr)) {
                 delete[] newImageFrame.pBuffer;
                 newImageFrame.pBuffer = NULL;
             }
-
-        }
-        else
-        {
+        } else {
             hr = E_FAIL;
         }
-
         pImageWrapper->Release();
     }
 
@@ -1006,7 +999,7 @@ HRESULT LoadSkyboxImages()
     ImageFrame imgFrame[6];
     for (int i = 0; i < 6; i++) {
         if (!LoadImageFile(cubeSrc[i], imgFrame[i])) {
-            OutputDebugStringA("Error: File not found\r\n");
+            OutputDebugStringA("Error: LoadSkyboxImages(), File not found\r\n");
             continue;
         }
         cubeMapDesc.Width = imgFrame[0].unWidth;
@@ -1312,8 +1305,8 @@ HRESULT LoadHDRTexture()
     // Load the Texture
     DirectX::TexMetadata md;
     DirectX::ScratchImage img;
-    //WCHAR filepath[] = L"sunset_1k.hdr";
-    WCHAR filepath[] = L"newport_loft.hdr";
+    WCHAR filepath[] = L"sunset_1k.hdr";
+    //WCHAR filepath[] = L"newport_loft.hdr";
     hr = LoadFromHDRFile(filepath,
                          &md,
                          img);
@@ -1321,10 +1314,21 @@ HRESULT LoadHDRTexture()
         OutputDebugStringA("Error: File not found\r\n");
         return hr;
     }
+    // HDR map origin is upper-left, needs to flip source
+    ScratchImage destImage;
+    hr = FlipRotate(img.GetImages(), 
+                    img.GetImageCount(),
+                    img.GetMetadata(),
+                    TEX_FR_FLIP_HORIZONTAL, 
+                    destImage);
+    if (FAILED(hr)) {
+        OutputDebugStringA("Error: Failed to flip image\r\n");
+        return hr;
+    }
 
     hr = CreateShaderResourceView(g_pd3dDevice,
-                                  img.GetImages(),
-                                  img.GetImageCount(),
+                                  destImage.GetImages(),
+                                  destImage.GetImageCount(),
                                   md,
                                   &g_pHDRTextureRV);
     if (FAILED(hr))
@@ -1349,25 +1353,24 @@ HRESULT InitIBLConstBuffer()
         return hr;
 
     // Initialize the camera view matrix, 6 directions
-    // HDR environment map needs to flip source
     XMVECTOR Eye = XMVectorSet(0.f, 0.f, 0.f, 0.f);
     XMVECTOR At[6] =
     {
         XMVectorSet( 1.f,  0.f,  0.f, 0.f),     // +X
         XMVectorSet(-1.f,  0.f,  0.f, 0.f),     // -X
-        XMVectorSet( 0.f,  -1.f,  0.f, 0.f),     // +Y
-        XMVectorSet( 0.f, 1.f,  0.f, 0.f),     // -Y
+        XMVectorSet( 0.f,  1.f,  0.f, 0.f),     // +Y
+        XMVectorSet( 0.f, -1.f,  0.f, 0.f),     // -Y
         XMVectorSet( 0.f,  0.f,  1.f, 0.f),     // +Z
-        XMVectorSet( 0.f,  0.f, -1.f, 0.f)      // -Z
+        XMVectorSet( 0.f,  0.f, -1.f, 0.f),     // -Z
     };
     XMVECTOR Up[6] =
     {
-        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // +X
-        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // -X
-        XMVectorSet(0.f, 0.f, 1.f, 0.f),       // +Y
-        XMVectorSet(0.f, 0.f,  -1.f, 0.f),       // -Y
-        XMVectorSet(0.f, -1.f,  0.f, 0.f),       // +Z
-        XMVectorSet(0.f, 1.f,  0.f, 0.f)        // -Z
+        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // +X
+        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // -X
+        XMVectorSet(0.f, 0.f, -1.f, 0.f),       // +Y
+        XMVectorSet(0.f, 0.f,  1.f, 0.f),       // -Y
+        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // +Z
+        XMVectorSet(0.f, 1.f,  0.f, 0.f),       // -Z
     };
     for (int i = 0; i < 6; i++) {
         g_CubeViews[i] = XMMatrixLookAtLH(Eye, At[i], Up[i]);
@@ -1449,13 +1452,10 @@ void RenderCube(UINT face)
 {
     // Clear cube map face and depth buffer.
     // Clear the back buffer &  depth buffer
+
     float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red, green, blue, alpha
     g_pImmediateContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
     g_pImmediateContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
-
-    // Bind cube map face as render target.
-    //ID3D11RenderTargetView** renderTargets;
-    //renderTargets = &g_pCubeMapRTVs[face];
     g_pImmediateContext->OMSetRenderTargets(1, &g_pCubeMapRTVs[face], g_pCubeMapDSV);
 
     XMMATRIX world = XMMatrixIdentity();

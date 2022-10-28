@@ -44,10 +44,11 @@ SKYMAP_VS_OUTPUT VS_Cubemap(SKYMAP_INPUT input )
 //--------------------------------------------------------------------------------------
 // Pixel Shader: PS_Cubmap (from_HDR)
 //--------------------------------------------------------------------------------------
+// https://huailiang.github.io/blog/2019/ibl/
 float2 SampleSphericalMap(float3 v)
 {
     float2 invAtan = float2(0.1591, 0.3183);
-    float2 uv = float2(atan(v.z/v.x), asin(v.y));
+    float2 uv = float2(atan2(v.z, v.x), asin(v.y));
     uv *= invAtan;
     uv += 0.5;
     return uv;
