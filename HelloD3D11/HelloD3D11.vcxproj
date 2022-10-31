@@ -173,10 +173,12 @@ copy .\*.manifest ..\x64\Release</Command>
     <ClInclude Include="HelloD3D11.h" />
     <ClInclude Include="IImageWrapper.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="stb_image.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="HelloD3D11.cpp" />
+    <ClCompile Include="stb_image.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="HelloD3D11.rc" />

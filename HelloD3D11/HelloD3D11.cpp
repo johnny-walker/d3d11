@@ -10,6 +10,8 @@
 #include "directxtex.h"
 #include <initguid.h>
 #include "IImageWrapper.h" 
+#include "stb_image.h"
+
 struct ImageFrame {
     BYTE* pBuffer;
     UINT unWidth;
@@ -1354,37 +1356,88 @@ HRESULT LoadHDRTexture()
     HRESULT hr = S_OK;
 
     // Load the Texture
-    DirectX::TexMetadata md;
-    DirectX::ScratchImage img;
-    WCHAR filepath[] = L"sunset_1k.hdr";
-    //WCHAR filepath[] = L"newport_loft.hdr";
-    hr = LoadFromHDRFile(filepath,
-                         &md,
-                         img);
-    if (FAILED(hr)) {
-        OutputDebugStringA("Error: File not found\r\n");
-        return hr;
-    }
-    // HDR map origin is upper-left, needs to flip source
-    ScratchImage dstImg;
-    hr = FlipRotate(img.GetImages(), 
-                    img.GetImageCount(),
-                    img.GetMetadata(),
-                    TEX_FR_FLIP_VERTICAL, 
-                    dstImg);
-    if (FAILED(hr)) {
-        OutputDebugStringA("Error: Failed to flip image\r\n");
-        return hr;
-    }
+    bool dxTex = false;
+    if (dxTex) {
+        WCHAR filepath[] = L"sunset_1k.hdr";
+        //WCHAR filepath[] = L"newport_loft.hdr";
 
-    hr = CreateShaderResourceView(g_pd3dDevice,
-                                  dstImg.GetImages(),
-                                  dstImg.GetImageCount(),
-                                  md,
-                                  &g_pHDRTextureRV);
-    if (FAILED(hr))
-        return hr;
+        DirectX::TexMetadata md;
+        DirectX::ScratchImage img;
+        hr = LoadFromHDRFile(filepath,
+                             &md,
+                             img);
+        if (FAILED(hr)) {
+            OutputDebugStringA("Error: File not found\r\n");
+            return hr;
+        }
+        // HDR map origin is upper-left, needs to flip source
+        ScratchImage dstImg;
+        hr = FlipRotate(img.GetImages(),
+                        img.GetImageCount(),
+                        img.GetMetadata(),
+                        TEX_FR_FLIP_VERTICAL,
+                        dstImg);
+        if (FAILED(hr)) {
+            OutputDebugStringA("Error: Failed to flip image\r\n");
+            return hr;
+        }
 
+        hr = CreateShaderResourceView(g_pd3dDevice,
+                                      dstImg.GetImages(),
+                                      dstImg.GetImageCount(),
+                                      md,
+                                      &g_pHDRTextureRV);
+        if (FAILED(hr))
+            return hr;
+    } else {
+        char filepath[] = "sunset_1k.hdr";
+        //char filepath[] = "newport_loft.hdr";
+
+        stbi_set_flip_vertically_on_load(true);
+        int width = 0, height = 0, nComponents = 0;
+        float* pData = stbi_loadf(filepath, &width, &height, &nComponents, 3);
+        if (!pData) {
+            return hr;
+        }
+
+        D3D11_TEXTURE2D_DESC tex2DDesc;
+        ZeroMemory(&tex2DDesc, sizeof(tex2DDesc));
+        tex2DDesc.Width = width;
+        tex2DDesc.Height = height;
+        tex2DDesc.MipLevels = 1;
+        tex2DDesc.ArraySize = 1;
+        tex2DDesc.SampleDesc.Count = 1;
+        tex2DDesc.Usage = D3D11_USAGE_DYNAMIC;
+        tex2DDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        tex2DDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;
+        tex2DDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        ID3D11Texture2D* pHDRTex = NULL;
+        D3D11_SUBRESOURCE_DATA subData;
+        ZeroMemory(&subData, sizeof(subData));
+        subData.pSysMem = (BYTE*)pData;
+        subData.SysMemPitch = width * 3 * 4;
+        subData.SysMemSlicePitch = width * height * 3 * 4;
+
+        hr = g_pd3dDevice->CreateTexture2D(&tex2DDesc, &subData, &pHDRTex);
+        if (FAILED(hr))  {
+            return hr;
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc;
+        memset(&SRVDesc, 0, sizeof(SRVDesc));
+        SRVDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;
+        SRVDesc.ViewDimension = D3D_SRV_DIMENSION_TEXTURE2D;
+        SRVDesc.Texture2D.MipLevels = 1;
+
+        hr = g_pd3dDevice->CreateShaderResourceView(pHDRTex,
+                                                    &SRVDesc, 
+                                                    &g_pHDRTextureRV);
+        if (FAILED(hr))  {
+            return hr;
+        }
+
+    }
     hr = CreateSamplerLinear();
     return hr;
 }
