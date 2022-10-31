@@ -59,10 +59,8 @@ float4 PS_IrrConv(IRR_VS_OUTPUT input) : SV_Target
 
     float sampleDelta = 0.025;
     float nrSamples = 0.f;
-    for (float phi = 0.f; phi < 2.f * PI; phi += sampleDelta)
-    {
-        for (float theta = 0.f; theta < 0.5 * PI; theta += sampleDelta)
-        {
+    for (float phi = 0.f; phi < 2.f * PI; phi += sampleDelta) {
+        for (float theta = 0.f; theta < 0.5 * PI; theta += sampleDelta) {
             // spherical to cartesian (in tangent space)
             float3 tangentSample = float3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
             // tangent space to world
