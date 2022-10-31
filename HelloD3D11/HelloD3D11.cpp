@@ -1395,7 +1395,7 @@ HRESULT LoadHDRTexture()
 
         stbi_set_flip_vertically_on_load(true);
         int width = 0, height = 0, nComponents = 0;
-        float* pData = stbi_loadf(filepath, &width, &height, &nComponents, 3);
+        float* pData = stbi_loadf(filepath, &width, &height, &nComponents, 0);
         if (!pData) {
             return hr;
         }
@@ -1416,8 +1416,8 @@ HRESULT LoadHDRTexture()
         D3D11_SUBRESOURCE_DATA subData;
         ZeroMemory(&subData, sizeof(subData));
         subData.pSysMem = (BYTE*)pData;
-        subData.SysMemPitch = width * 3 * 4;
-        subData.SysMemSlicePitch = width * height * 3 * 4;
+        subData.SysMemPitch = width * nComponents * 4;
+        subData.SysMemSlicePitch = width * height * nComponents * 4;
 
         hr = g_pd3dDevice->CreateTexture2D(&tex2DDesc, &subData, &pHDRTex);
         if (FAILED(hr))  {
