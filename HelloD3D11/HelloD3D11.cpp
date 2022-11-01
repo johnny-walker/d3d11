@@ -1370,7 +1370,7 @@ HRESULT LoadHDRTexture()
             OutputDebugStringA("Error: File not found\r\n");
             return hr;
         }
-        // HDR map origin is upper-left, needs to flip source
+        // HDR map origin is bottom-left, needs to flip source
         ScratchImage dstImg;
         hr = FlipRotate(img.GetImages(),
                         img.GetImageCount(),
@@ -1415,9 +1415,9 @@ HRESULT LoadHDRTexture()
         ID3D11Texture2D* pHDRTex = NULL;
         D3D11_SUBRESOURCE_DATA subData;
         ZeroMemory(&subData, sizeof(subData));
-        subData.pSysMem = (BYTE*)pData;
+        subData.pSysMem = (BYTE*) pData;
         subData.SysMemPitch = width * nComponents * 4;
-        subData.SysMemSlicePitch = width * height * nComponents * 4;
+        //subData.SysMemSlicePitch = width * height * nComponents * 4;
 
         hr = g_pd3dDevice->CreateTexture2D(&tex2DDesc, &subData, &pHDRTex);
         if (FAILED(hr))  {
