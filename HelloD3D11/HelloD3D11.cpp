@@ -889,7 +889,6 @@ HRESULT InitIBL()
     //step1: load HDR and convert to cubemap
     hr |= InitIBLShaders();
     hr |= InitCubeVertex();
-    hr |= InitIrrConvShaders();
     hr |= LoadHDRTexture();
     hr |= InitIBLConstBuffer();
     hr |= CreateSkyboxRasterState();
@@ -898,7 +897,7 @@ HRESULT InitIBL()
         return hr;
 
     UINT cubemapSize = 512;
-    if (cubemapSize == 2048) {
+    if (false) {
         //test code
         hr = LoadSkyboxImages();
     } else {
