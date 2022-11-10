@@ -70,7 +70,7 @@ XMMATRIX                    g_Projection;
 D3D_DRIVER_TYPE             g_driverType = D3D_DRIVER_TYPE_NULL;
 D3D_FEATURE_LEVEL           g_featureLevel = D3D_FEATURE_LEVEL_11_0;
 ID3D11Device*               g_pd3dDevice = NULL;
-BOOL                        g_bDeffer = FALSE;
+BOOL                        g_bDeffer = TRUE;
 ID3D11DeviceContext*        g_pImmediateContext = NULL;
 ID3D11DeviceContext*        g_pDeferredContext = NULL;
 IDXGISwapChain*             g_pSwapChain = NULL;
@@ -358,11 +358,11 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
 void ExecuteCommandList()
 {
     ID3D11CommandList* pd3dCommandList;
-    HRESULT hr = g_pDeferredContext->FinishCommandList(FALSE, &pd3dCommandList);
+    HRESULT hr = g_pDeferredContext->FinishCommandList(TRUE, &pd3dCommandList);
     if (SUCCEEDED(hr))
-        g_pDeferredContext->ExecuteCommandList(pd3dCommandList, FALSE);
-    g_pDeferredContext->Flush();
-    g_pDeferredContext->ClearState();
+        g_pImmediateContext->ExecuteCommandList(pd3dCommandList, TRUE);
+    g_pImmediateContext->Flush();
+    //g_pImmediateContext->ClearState();
 }
 
 HRESULT InitDevice(UINT width, UINT height)
@@ -770,7 +770,6 @@ HRESULT InitConstBuffer(UINT width, UINT height)
 void RenderWorld() 
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
-    //ID3D11DeviceContext* pContext = g_pImmediateContext;
 
     UINT stride = sizeof(SimpleVertex);
     UINT offset = 0;
@@ -858,7 +857,6 @@ void RenderSkybox();
 void Render()
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
-    //ID3D11DeviceContext* pContext = g_pImmediateContext;
 
     SetViewPort(pContext, g_width, g_height);
     pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -870,9 +868,7 @@ void Render()
     pContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-
-    //g_pSwapChain->Present(0, 0);
-    //return;
+    //ExecuteCommandList();
 
     RenderWorld();
     ExecuteCommandList();
@@ -1550,7 +1546,6 @@ void RenderCube(ID3D11DeviceContext*, UINT);
 void DrawCubeMap(UINT cubeMapSize)
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
-    //ID3D11DeviceContext* pContext = g_pImmediateContext;
 
     SetViewPort(pContext, cubeMapSize, cubeMapSize);
     pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1575,7 +1570,6 @@ void DrawCubeMap(UINT cubeMapSize)
 
     for (int i = 0; i < 6; ++i)  {
         RenderCube(pContext, i);
-        //ExecuteCommandList();
     }
     pContext->GenerateMips(g_pCubeTexSR);
     ExecuteCommandList();
@@ -1605,7 +1599,6 @@ void RenderCube(ID3D11DeviceContext* pContext, UINT face)
 void RenderSkybox()
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
-    //ID3D11DeviceContext* pContext = g_pImmediateContext;
 
     UINT stride = sizeof(CubeVertex);
     UINT offset = 0;
@@ -1636,7 +1629,6 @@ void RenderSkybox()
 
     pContext->OMSetDepthStencilState(0, 0);
 
-    ExecuteCommandList();
 }
 
 void CleanupIBL()
