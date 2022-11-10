@@ -70,7 +70,9 @@ XMMATRIX                    g_Projection;
 D3D_DRIVER_TYPE             g_driverType = D3D_DRIVER_TYPE_NULL;
 D3D_FEATURE_LEVEL           g_featureLevel = D3D_FEATURE_LEVEL_11_0;
 ID3D11Device*               g_pd3dDevice = NULL;
+BOOL                        g_bDeffer = FALSE;
 ID3D11DeviceContext*        g_pImmediateContext = NULL;
+ID3D11DeviceContext*        g_pDeferredContext = NULL;
 IDXGISwapChain*             g_pSwapChain = NULL;
 ID3D11RenderTargetView*     g_pRenderTargetView = NULL;
 ID3D11RasterizerState*      g_pRasterizerState = NULL;
@@ -102,7 +104,7 @@ HRESULT             InitDevice(UINT, UINT);
 HRESULT             CreateRenderTargetView(UINT, UINT);
 HRESULT             CreateRasterState();
 HRESULT             CreateDepthBuffer(UINT, UINT);
-void                SetViewPort(UINT, UINT);
+void                SetViewPort(ID3D11DeviceContext* pContext, UINT, UINT);
 HRESULT             InitShaders();
 HRESULT             InitVertex();
 HRESULT             InitConstBuffer(UINT, UINT);
@@ -353,6 +355,16 @@ HRESULT CompileShaderFromFile(const WCHAR* szFileName, LPCSTR szEntryPoint, LPCS
     return hr;
 }
 
+void ExecuteCommandList()
+{
+    ID3D11CommandList* pd3dCommandList;
+    HRESULT hr = g_pDeferredContext->FinishCommandList(FALSE, &pd3dCommandList);
+    if (SUCCEEDED(hr))
+        g_pDeferredContext->ExecuteCommandList(pd3dCommandList, FALSE);
+    g_pDeferredContext->Flush();
+    g_pDeferredContext->ClearState();
+}
+
 HRESULT InitDevice(UINT width, UINT height)
 {
     g_width = width;
@@ -415,6 +427,8 @@ HRESULT InitDevice(UINT width, UINT height)
     }
     if (FAILED(hr))
         return hr;
+
+    hr = g_pd3dDevice->CreateDeferredContext(0, &g_pDeferredContext);
 
     //(1) load HDR and convert to cubemap as skybox's resource views (6) 
     hr = InitIBL();
@@ -505,7 +519,7 @@ HRESULT CreateDepthBuffer(UINT width, UINT height)
     return hr;
 }
 
-void SetViewPort(UINT width, UINT height)
+void SetViewPort(ID3D11DeviceContext* pContext, UINT width, UINT height)
 {
     D3D11_VIEWPORT vp;
     vp.Width = (FLOAT)width;
@@ -515,7 +529,7 @@ void SetViewPort(UINT width, UINT height)
     vp.TopLeftX = 0;
     vp.TopLeftY = 0;
 
-    g_pImmediateContext->RSSetViewports(1, &vp);
+    pContext->RSSetViewports(1, &vp);
 }
 
 HRESULT InitShaders()
@@ -755,11 +769,14 @@ HRESULT InitConstBuffer(UINT width, UINT height)
 
 void RenderWorld() 
 {
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+    //ID3D11DeviceContext* pContext = g_pImmediateContext;
+
     UINT stride = sizeof(SimpleVertex);
     UINT offset = 0;
-    g_pImmediateContext->IASetInputLayout(g_pVertexLayout);
-    g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
-    g_pImmediateContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    pContext->IASetInputLayout(g_pVertexLayout);
+    pContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
+    pContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
     // Update time
     static float t = 0.0f;
@@ -809,16 +826,16 @@ void RenderWorld()
     cb1.vLightColor[0] = vLightColors[0];
     cb1.vLightColor[1] = vLightColors[1];
     cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
-    g_pImmediateContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+    pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
 
-    g_pImmediateContext->VSSetShader(g_pVertexShader, NULL, 0);
-    g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pImmediateContext->PSSetShader(g_pPixelShader, NULL, 0);
-    g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pImmediateContext->RSSetState(g_pRasterizerState);
-    g_pImmediateContext->PSSetShaderResources(0, 1, &g_pTextureRV);
-    g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
-    g_pImmediateContext->DrawIndexed(36, 0, 0);
+    pContext->VSSetShader(g_pVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    pContext->PSSetShader(g_pPixelShader, NULL, 0);
+    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    pContext->RSSetState(g_pRasterizerState);
+    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+    pContext->DrawIndexed(36, 0, 0);
 
     // Render each light
     for (int m = 0; m < 2; m++)
@@ -830,27 +847,35 @@ void RenderWorld()
         // Update the world variable to reflect the current light
         cb1.mWorld = XMMatrixTranspose(mLight);
         cb1.vOutputColor = vLightColors[m];
-        g_pImmediateContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+        pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
 
-        g_pImmediateContext->PSSetShader(g_pPSSolid, NULL, 0);
-        g_pImmediateContext->DrawIndexed(36, 0, 0);
+        pContext->PSSetShader(g_pPSSolid, NULL, 0);
+        pContext->DrawIndexed(36, 0, 0);
     }
 }
 
 void RenderSkybox();
 void Render()
 {
-    SetViewPort(g_width, g_height);
-    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+    //ID3D11DeviceContext* pContext = g_pImmediateContext;
+
+    SetViewPort(pContext, g_width, g_height);
+    pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    pContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
     
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.0f, 0.1f, 0.3f, 1.0f }; // red,green,blue,alpha
-    g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, ClearColor);
-    g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    float ClearColor[4] = { 0.0f, 0.0f, 1.f, 1.0f }; // red,green,blue,alpha
+    pContext->ClearRenderTargetView(g_pRenderTargetView, ClearColor);
+    pContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
+
+    //g_pSwapChain->Present(0, 0);
+    //return;
+
     RenderWorld();
+    ExecuteCommandList();
 
     // Present our back buffer to our front buffer
     g_pSwapChain->Present(0, 0);
@@ -859,6 +884,7 @@ void Render()
 void CleanupDevice()
 {
     if (g_pImmediateContext) g_pImmediateContext->ClearState();
+    if (g_pDeferredContext) g_pDeferredContext->ClearState();
 
     if (g_pSamplerLinear) g_pSamplerLinear->Release();
     if (g_pTextureRV) g_pTextureRV->Release();
@@ -1051,8 +1077,8 @@ HRESULT InitHDRRenderTarget(UINT cubeSize)
     cubeMapDesc.ArraySize = 6;          // 6 faces for cubemap
     cubeMapDesc.SampleDesc.Count = 1;
     cubeMapDesc.SampleDesc.Quality = 0;
-    //cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     cubeMapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    //cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
     cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     cubeMapDesc.CPUAccessFlags = 0;
@@ -1507,7 +1533,7 @@ HRESULT CreateSkyboxRasterState()
     //RSState.FillMode = D3D11_FILL_WIREFRAME;
     RSState.CullMode = D3D11_CULL_BACK;
     //RSState.CullMode = D3D11_CULL_NONE;
-    RSState.FrontCounterClockwise = true;
+    RSState.FrontCounterClockwise = TRUE;
     RSState.DepthBias = 0;
     RSState.DepthBiasClamp = 0.0f;
     RSState.SlopeScaledDepthBias = 0.0f;
@@ -1520,46 +1546,51 @@ HRESULT CreateSkyboxRasterState()
     return hr;
 }
 
-void RenderCube(UINT);
+void RenderCube(ID3D11DeviceContext*, UINT);
 void DrawCubeMap(UINT cubeMapSize)
 {
-    SetViewPort(cubeMapSize, cubeMapSize);
-    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+    //ID3D11DeviceContext* pContext = g_pImmediateContext;
+
+    SetViewPort(pContext, cubeMapSize, cubeMapSize);
+    pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 
     UINT stride = sizeof(CubeVertex);
     UINT offset = 0;    
-    g_pImmediateContext->IASetInputLayout(g_pCubeVertexLayout);
-    g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
-    g_pImmediateContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    pContext->IASetInputLayout(g_pCubeVertexLayout);
+    pContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
+    pContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
     // Generate the cube map.
-    g_pImmediateContext->VSSetShader(g_pCubeVertexShader, NULL, 0);
-    g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
+    pContext->VSSetShader(g_pCubeVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
 
-    g_pImmediateContext->PSSetShader(g_pCubePixelShader, NULL, 0);
+    pContext->PSSetShader(g_pCubePixelShader, NULL, 0);
 
-    g_pImmediateContext->PSSetShaderResources(0, 1, &g_pHDRTextureRV);
-    g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+    pContext->PSSetShaderResources(0, 1, &g_pHDRTextureRV);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
-    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, counter clockwise CULL_BACK
+    pContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, counter clockwise CULL_BACK
 
     for (int i = 0; i < 6; ++i)  {
-        RenderCube(i);
+        RenderCube(pContext, i);
+        //ExecuteCommandList();
     }
-    g_pImmediateContext->GenerateMips(g_pCubeTexSR);
+    pContext->GenerateMips(g_pCubeTexSR);
+    ExecuteCommandList();
 }
 
 // draw HDR color onto cubemap's 6 faces
-void RenderCube(UINT face)
+void RenderCube(ID3D11DeviceContext* pContext, UINT face)
 {
     // Clear cube map face and depth buffer.
     // Clear the back buffer &  depth buffer
 
-    float ClearColor[4] = { 0.f, 0.f, 0.f, 1.f }; // red, green, blue, alpha
-    g_pImmediateContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
-    g_pImmediateContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
-    g_pImmediateContext->OMSetRenderTargets(1, &g_pCubeMapRTVs[face], g_pCubeMapDSV);
+    float ClearColor[4] = { 0.f, 1.f, 0.f, 1.f }; // red, green, blue, alpha
+    pContext->ClearRenderTargetView(g_pCubeMapRTVs[face], ClearColor);
+    pContext->ClearDepthStencilView(g_pCubeMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
+    pContext->OMSetRenderTargets(1, &g_pCubeMapRTVs[face], g_pCubeMapDSV);
 
     XMMATRIX world = XMMatrixIdentity();
 
@@ -1567,17 +1598,20 @@ void RenderCube(UINT face)
     cb.mWorld = XMMatrixTranspose(world);
     cb.mView = XMMatrixTranspose(g_CubeViews[face]);
     cb.mProjection = XMMatrixTranspose(g_CubeProjection);
-    g_pImmediateContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
-    g_pImmediateContext->DrawIndexed(36, 0, 0);
+    pContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
+    pContext->DrawIndexed(36, 0, 0);
 }
 
 void RenderSkybox()
 {
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+    //ID3D11DeviceContext* pContext = g_pImmediateContext;
+
     UINT stride = sizeof(CubeVertex);
     UINT offset = 0;
-    g_pImmediateContext->IASetInputLayout(g_pCubeVertexLayout);
-    g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
-    g_pImmediateContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    pContext->IASetInputLayout(g_pCubeVertexLayout);
+    pContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
+    pContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
     XMMATRIX world = XMMatrixIdentity();
 
@@ -1586,21 +1620,23 @@ void RenderSkybox()
     cb.mView = XMMatrixTranspose(g_View);
     cb.mProjection = XMMatrixTranspose(g_Projection);
 
-    g_pImmediateContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
+    pContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
     
-    g_pImmediateContext->VSSetShader(g_pSkyboxVertexShader, NULL, 0);
-    g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
+    pContext->VSSetShader(g_pSkyboxVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
 
-    g_pImmediateContext->RSSetState(g_pSkyboxRasterizerState);  //must-have, counter_clockwise CULL_BACK
-    g_pImmediateContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have, LESS_EQUAL
+    pContext->RSSetState(g_pSkyboxRasterizerState);
+    pContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have, LESS_EQUAL
 
-    g_pImmediateContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
+    pContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
 
-    g_pImmediateContext->PSSetShaderResources(0, 1, &g_pCubeTexSR);
-    g_pImmediateContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
-    g_pImmediateContext->DrawIndexed(36, 0, 0);
+    pContext->PSSetShaderResources(0, 1, &g_pCubeTexSR);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+    pContext->DrawIndexed(36, 0, 0);
 
-    g_pImmediateContext->OMSetDepthStencilState(0, 0);
+    pContext->OMSetDepthStencilState(0, 0);
+
+    ExecuteCommandList();
 }
 
 void CleanupIBL()
