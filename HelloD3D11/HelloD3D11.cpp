@@ -359,10 +359,11 @@ void ExecuteCommandList()
 {
     ID3D11CommandList* pd3dCommandList;
     HRESULT hr = g_pDeferredContext->FinishCommandList(TRUE, &pd3dCommandList);
-    if (SUCCEEDED(hr))
+    if (SUCCEEDED(hr)) {
         g_pImmediateContext->ExecuteCommandList(pd3dCommandList, TRUE);
-    g_pImmediateContext->Flush();
-    //g_pImmediateContext->ClearState();
+        g_pImmediateContext->Flush();
+        //g_pImmediateContext->ClearState();
+    }
 }
 
 HRESULT InitDevice(UINT width, UINT height)
@@ -777,6 +778,16 @@ void RenderWorld()
     pContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
     pContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
+    pContext->VSSetShader(g_pVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+
+    pContext->PSSetShader(g_pPixelShader, NULL, 0);
+    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+
+    pContext->RSSetState(g_pRasterizerState);
+
     // Update time
     static float t = 0.0f;
     if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
@@ -827,16 +838,10 @@ void RenderWorld()
     cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
     pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
 
-    pContext->VSSetShader(g_pVertexShader, NULL, 0);
-    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    pContext->PSSetShader(g_pPixelShader, NULL, 0);
-    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    pContext->RSSetState(g_pRasterizerState);
-    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
-    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
     pContext->DrawIndexed(36, 0, 0);
 
     // Render each light
+    pContext->PSSetShader(g_pPSSolid, NULL, 0);
     for (int m = 0; m < 2; m++)
     {
         XMMATRIX mLight = XMMatrixTranslationFromVector(5.0f * XMLoadFloat4(&vLightDirs[m]));
@@ -848,7 +853,6 @@ void RenderWorld()
         cb1.vOutputColor = vLightColors[m];
         pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
 
-        pContext->PSSetShader(g_pPSSolid, NULL, 0);
         pContext->DrawIndexed(36, 0, 0);
     }
 }
@@ -868,8 +872,6 @@ void Render()
     pContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-    //ExecuteCommandList();
-
     RenderWorld();
     ExecuteCommandList();
 
@@ -1547,12 +1549,9 @@ void DrawCubeMap(UINT cubeMapSize)
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
 
-    SetViewPort(pContext, cubeMapSize, cubeMapSize);
-    pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-
     UINT stride = sizeof(CubeVertex);
     UINT offset = 0;    
+    pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     pContext->IASetInputLayout(g_pCubeVertexLayout);
     pContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
     pContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
@@ -1562,11 +1561,11 @@ void DrawCubeMap(UINT cubeMapSize)
     pContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
 
     pContext->PSSetShader(g_pCubePixelShader, NULL, 0);
-
     pContext->PSSetShaderResources(0, 1, &g_pHDRTextureRV);
     pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
     pContext->RSSetState(g_pSkyboxRasterizerState);   //must-have, counter clockwise CULL_BACK
+    SetViewPort(pContext, cubeMapSize, cubeMapSize);
 
     for (int i = 0; i < 6; ++i)  {
         RenderCube(pContext, i);
@@ -1606,29 +1605,27 @@ void RenderSkybox()
     pContext->IASetVertexBuffers(0, 1, &g_pCubeVertexBuffer, &stride, &offset);
     pContext->IASetIndexBuffer(g_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-    XMMATRIX world = XMMatrixIdentity();
-
-    ConstCubeBuffer cb;
-    cb.mWorld = XMMatrixTranspose(world);
-    cb.mView = XMMatrixTranspose(g_View);
-    cb.mProjection = XMMatrixTranspose(g_Projection);
-
-    pContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
-    
     pContext->VSSetShader(g_pSkyboxVertexShader, NULL, 0);
     pContext->VSSetConstantBuffers(0, 1, &g_pCubeConstBuffer);
+
+     pContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
+    pContext->PSSetShaderResources(0, 1, &g_pCubeTexSR);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
 
     pContext->RSSetState(g_pSkyboxRasterizerState);
     pContext->OMSetDepthStencilState(g_pSkyboxDepthState, 0);  //must-have, LESS_EQUAL
 
-    pContext->PSSetShader(g_pSkyboxPixelShader, NULL, 0);
+    ConstCubeBuffer cb;
+    XMMATRIX world = XMMatrixIdentity();
+    cb.mWorld = XMMatrixTranspose(world);
+    cb.mView = XMMatrixTranspose(g_View);
+    cb.mProjection = XMMatrixTranspose(g_Projection);
+    pContext->UpdateSubresource(g_pCubeConstBuffer, 0, NULL, &cb, 0, 0);
 
-    pContext->PSSetShaderResources(0, 1, &g_pCubeTexSR);
-    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
     pContext->DrawIndexed(36, 0, 0);
 
+    //restore to LESS
     pContext->OMSetDepthStencilState(0, 0);
-
 }
 
 void CleanupIBL()
