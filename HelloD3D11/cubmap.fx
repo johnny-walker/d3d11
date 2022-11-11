@@ -36,7 +36,7 @@ SKYMAP_VS_OUTPUT VS_Cubemap(SKYMAP_INPUT input )
     output.Pos = mul( input.Pos, View);
     output.Pos = mul( output.Pos, Projection );
 
-    output.texCoord = input.Pos;
+    output.texCoord = input.Pos.xyz;
     return output;
 }
 

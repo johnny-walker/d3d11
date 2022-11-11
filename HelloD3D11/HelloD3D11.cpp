@@ -1448,7 +1448,7 @@ HRESULT LoadHDRTexture()
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC SRVDesc;
-        memset(&SRVDesc, 0, sizeof(SRVDesc));
+        ZeroMemory(&SRVDesc, sizeof(SRVDesc));
         SRVDesc.Format = DXGI_FORMAT_R32G32B32_FLOAT;
         SRVDesc.ViewDimension = D3D_SRV_DIMENSION_TEXTURE2D;
         SRVDesc.Texture2D.MipLevels = 1;
