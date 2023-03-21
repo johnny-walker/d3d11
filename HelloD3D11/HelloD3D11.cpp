@@ -154,7 +154,7 @@ HRESULT InitIBLConstBuffer();
 HRESULT CreateSkyboxRasterState();
 void    DrawCubeMap(UINT);
 
-
+bool g_MSAA = true;
 //------------------------------------------------------------------------------------
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -404,7 +404,7 @@ HRESULT InitDevice(UINT width, UINT height)
     sd.BufferDesc.RefreshRate.Denominator = 1;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd.OutputWindow = g_hWnd;
-    sd.SampleDesc.Count = 1;
+    sd.SampleDesc.Count = (g_MSAA) ? 4 : 1;
     sd.SampleDesc.Quality = 0;
     sd.Windowed = TRUE;
 
@@ -499,7 +499,7 @@ HRESULT CreateDepthBuffer(UINT width, UINT height)
     descDepth.MipLevels = 1;
     descDepth.ArraySize = 1;
     descDepth.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;   // depth 24bits, stencil 8bits
-    descDepth.SampleDesc.Count = 1;
+    descDepth.SampleDesc.Count = (g_MSAA)?4:1;
     descDepth.SampleDesc.Quality = 0;
     descDepth.Usage = D3D11_USAGE_DEFAULT;
     descDepth.BindFlags = D3D11_BIND_DEPTH_STENCIL;
@@ -513,7 +513,7 @@ HRESULT CreateDepthBuffer(UINT width, UINT height)
     D3D11_DEPTH_STENCIL_VIEW_DESC descDSV;
     ZeroMemory(&descDSV, sizeof(descDSV));
     descDSV.Format = descDepth.Format;
-    descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    descDSV.ViewDimension = (g_MSAA)?D3D11_DSV_DIMENSION_TEXTURE2DMS:D3D11_DSV_DIMENSION_TEXTURE2D;
     descDSV.Texture2D.MipSlice = 0;
     hr = g_pd3dDevice->CreateDepthStencilView(g_pDepthStencil, &descDSV, &g_pDepthStencilView);
 
