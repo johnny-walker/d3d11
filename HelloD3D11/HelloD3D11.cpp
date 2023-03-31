@@ -11,6 +11,7 @@
 #include <initguid.h>
 #include "IImageWrapper.h" 
 #include "stb_image.h"
+#include "D3DUtil.h"
 
 struct ImageFrame {
     BYTE* pBuffer;
@@ -154,7 +155,13 @@ HRESULT InitIBLConstBuffer();
 HRESULT CreateSkyboxRasterState();
 void    DrawCubeMap(UINT);
 
+DXGI_FORMAT g_fmt = DXGI_FORMAT_B8G8R8A8_UNORM;
+bool g_renderSky = true;
 bool g_MSAA = true;
+bool g_swapBuffer = false;
+ID3D11Texture2D* g_pBackTexture = NULL;
+ID3D11Texture2D* g_pResolveTexture = NULL;
+ID3D11Texture2D* g_pSysBackTexture = NULL;
 //------------------------------------------------------------------------------------
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -184,7 +191,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UINT width = rc.right - rc.left;
     UINT height = rc.bottom - rc.top;
 
-    hr = InitDevice(width, height);
+    hr = InitDevice(g_width, g_height);
     if (FAILED(hr))
     {
         CleanupDevice();
@@ -236,7 +243,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    HWND hWnd = CreateWindowW(szWindowClass, 
                              szTitle, 
                              WS_OVERLAPPEDWINDOW,
-                             100,
+                             650,
                              50,   
                              rc.right - rc.left, 
                              rc.bottom - rc.top, 
@@ -366,14 +373,53 @@ void ExecuteCommandList()
     }
 }
 
-HRESULT InitDevice(UINT width, UINT height)
+HRESULT CreateD3DDeviceOnly(UINT width, UINT height)
 {
-    g_width = width;
-    g_height = height;
-
     HRESULT hr = S_OK;
-
     UINT createDeviceFlags = 0;
+#ifdef _DEBUG
+    createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+    D3D_FEATURE_LEVEL supported_level[7];
+    UINT supported_level_size = 0;
+    supported_level[supported_level_size++] = D3D_FEATURE_LEVEL_11_0;
+    supported_level[supported_level_size++] = D3D_FEATURE_LEVEL_10_1;
+    supported_level[supported_level_size++] = D3D_FEATURE_LEVEL_10_0;
+    supported_level[supported_level_size++] = D3D_FEATURE_LEVEL_9_3;
+
+    D3D_DRIVER_TYPE type[3];
+    type[0] = D3D_DRIVER_TYPE_HARDWARE;
+    type[1] = D3D_DRIVER_TYPE_WARP;
+    type[2] = D3D_DRIVER_TYPE_REFERENCE;
+    UINT unType = 3;
+
+    for (unsigned int i = 0; i < unType; i++) {
+        g_driverType = type[i];
+        hr = D3D11CreateDevice(
+                                nullptr,
+                                g_driverType,
+                                nullptr,
+                                createDeviceFlags,
+                                supported_level,
+                                supported_level_size,
+                                D3D11_SDK_VERSION,
+                                &g_pd3dDevice,
+                                nullptr,
+                                &g_pImmediateContext
+                              );
+
+        if (SUCCEEDED(hr)) {
+            break;
+        }
+    }
+    return hr;
+}
+
+HRESULT CreateD3DDeviceSwapChain(UINT width, UINT height)
+{
+    HRESULT hr = S_OK;
+    UINT createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #ifdef _DEBUG
     createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -394,22 +440,25 @@ HRESULT InitDevice(UINT width, UINT height)
     };
     UINT numFeatureLevels = ARRAYSIZE(featureLevels);
 
-    DXGI_SWAP_CHAIN_DESC sd;
-    ZeroMemory(&sd, sizeof(sd));
-    sd.BufferCount = 1;
-    sd.BufferDesc.Width = width;
-    sd.BufferDesc.Height = height;
-    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.BufferDesc.RefreshRate.Numerator = 60;
-    sd.BufferDesc.RefreshRate.Denominator = 1;
-    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = g_hWnd;
-    sd.SampleDesc.Count = (g_MSAA) ? 4 : 1;
-    sd.SampleDesc.Quality = 0;
-    sd.Windowed = TRUE;
+    DXGI_SWAP_CHAIN_DESC swapChainDesc;
+    ZeroMemory(&swapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC));
+    swapChainDesc.BufferDesc.Width = width;
+    swapChainDesc.BufferDesc.Height = height;
+    swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
+    swapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
+    swapChainDesc.BufferDesc.Format = g_fmt;
+    swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_CENTERED;
+    swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_PROGRESSIVE;
+    swapChainDesc.BufferCount = 1;
+    swapChainDesc.OutputWindow = g_hWnd;
+    swapChainDesc.Windowed = TRUE;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.SampleDesc.Count = (g_MSAA) ? 4 : 1;
+    swapChainDesc.SampleDesc.Quality = 0;
+    swapChainDesc.Flags = 0;
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_SEQUENTIAL;
 
-    for (UINT driverTypeIndex = 0; driverTypeIndex < numDriverTypes; driverTypeIndex++)
-    {
+    for (UINT driverTypeIndex = 0; driverTypeIndex < numDriverTypes; driverTypeIndex++) {
         g_driverType = driverTypes[driverTypeIndex];
         hr = D3D11CreateDeviceAndSwapChain( NULL,
                                             g_driverType,
@@ -418,13 +467,28 @@ HRESULT InitDevice(UINT width, UINT height)
                                             featureLevels,
                                             numFeatureLevels,
                                             D3D11_SDK_VERSION,
-                                            &sd,
+                                            &swapChainDesc,
                                             &g_pSwapChain,
                                             &g_pd3dDevice,
                                             &g_featureLevel,
                                             &g_pImmediateContext);
         if (SUCCEEDED(hr))
             break;
+    }
+    return hr;
+}
+
+HRESULT InitDevice(UINT width, UINT height)
+{
+    g_width = width;
+    g_height = height;
+
+    HRESULT hr = S_OK;
+   
+    if (g_swapBuffer || true) {
+        hr = CreateD3DDeviceSwapChain(width, height);
+    } else {
+        hr = CreateD3DDeviceOnly(width, height);
     }
     if (FAILED(hr))
         return hr;
@@ -453,17 +517,74 @@ HRESULT InitDevice(UINT width, UINT height)
     return hr;
 }
 
+HRESULT CreateSysBackTexture2D(UINT unTextureWidth, UINT unTextureHeight, UINT sampleCnt)
+{
+    D3D11_TEXTURE2D_DESC tex2DDesc;
+    ZeroMemory(&tex2DDesc, sizeof(tex2DDesc));
+    tex2DDesc.ArraySize = 1;
+    tex2DDesc.BindFlags = 0;
+    tex2DDesc.Usage = D3D11_USAGE_STAGING;
+    tex2DDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ;
+    tex2DDesc.Format = g_fmt;
+    tex2DDesc.Width = unTextureWidth;
+    tex2DDesc.Height = unTextureHeight;
+    tex2DDesc.MipLevels = 1;
+    tex2DDesc.SampleDesc.Count = sampleCnt;
+
+    HRESULT hr = g_pd3dDevice->CreateTexture2D(&tex2DDesc, NULL, &g_pSysBackTexture);
+    return hr;
+}
+
+HRESULT CreateBackTexture(UINT width, UINT height, ID3D11Texture2D** ppNewTexture, UINT sampleCnt)
+{
+    if (ppNewTexture == NULL)
+        return E_INVALIDARG;
+
+    D3D11_TEXTURE2D_DESC tex2DDesc;
+    ZeroMemory(&tex2DDesc, sizeof(tex2DDesc));
+    tex2DDesc.ArraySize = 1;
+    tex2DDesc.BindFlags = D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+    tex2DDesc.Usage = D3D11_USAGE_DEFAULT;
+    tex2DDesc.CPUAccessFlags = 0;
+    tex2DDesc.Format = g_fmt;
+    tex2DDesc.Width = width;
+    tex2DDesc.Height = height;
+    tex2DDesc.MipLevels = 1;
+    tex2DDesc.SampleDesc.Count = sampleCnt;
+
+
+    HRESULT hr = g_pd3dDevice->CreateTexture2D(&tex2DDesc, NULL, &(*ppNewTexture));
+    return hr;
+}
+
 HRESULT CreateRenderTargetView(UINT width, UINT height)
 {
     HRESULT hr = S_OK;
-    // Create a render target view
-    ID3D11Texture2D* pBackBuffer = NULL;
-    hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
-    if (FAILED(hr))
-        return hr;
+    //D3D11_TEXTURE2D_DESC texDesc;
 
-    hr = g_pd3dDevice->CreateRenderTargetView(pBackBuffer, NULL, &g_pRenderTargetView);
-    pBackBuffer->Release();
+    if (g_swapBuffer) {
+        hr = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&g_pBackTexture);
+        if (FAILED(hr))
+            return hr;
+        hr = g_pd3dDevice->CreateRenderTargetView(g_pBackTexture, NULL, &g_pRenderTargetView);
+
+        //g_pBackTexture->GetDesc(&texDesc);
+        g_pBackTexture->Release();
+    } else {
+        UINT sampleCnt = (g_MSAA) ? 4 : 1;
+        hr = CreateBackTexture(g_width, g_height, &g_pBackTexture, sampleCnt);
+        if (FAILED(hr))
+            return hr;
+        //g_pBackTexture->GetDesc(&texDesc);
+
+        // create resolved Texture
+        hr = CreateBackTexture(g_width, g_height, &g_pResolveTexture, 1);
+        if (FAILED(hr))
+            return hr;
+
+        hr = g_pd3dDevice->CreateRenderTargetView(g_pBackTexture, NULL, &g_pRenderTargetView);
+        hr = CreateSysBackTexture2D(width, height, 1);
+    }
     return hr;
 }
 
@@ -867,7 +988,7 @@ void Render()
     pContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
     
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.0f, 0.0f, 1.f, 1.0f }; // red,green,blue,alpha
+    float ClearColor[4] = { 0.0f, 1.0f, 1.f, 1.0f }; // red,green,blue,alpha
     pContext->ClearRenderTargetView(g_pRenderTargetView, ClearColor);
     pContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
@@ -876,7 +997,13 @@ void Render()
     ExecuteCommandList();
 
     // Present our back buffer to our front buffer
-    g_pSwapChain->Present(0, 0);
+    if (g_swapBuffer) {
+        g_pSwapChain->Present(0, 0);
+    } else {
+        g_pImmediateContext->ResolveSubresource(g_pResolveTexture, 0, g_pBackTexture, 0, g_fmt);
+        g_pImmediateContext->CopyResource(g_pSysBackTexture, g_pResolveTexture);
+        DumpTexture2DDatatoScreen(g_pd3dDevice, g_pImmediateContext, g_pSysBackTexture);
+    }
 }
 
 void CleanupDevice()
@@ -1076,7 +1203,7 @@ HRESULT InitHDRRenderTarget(UINT cubeSize)
     cubeMapDesc.SampleDesc.Count = 1;
     cubeMapDesc.SampleDesc.Quality = 0;
     cubeMapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-    //cubeMapDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    //cubeMapDesc.Format = g_fmt;
     cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
     cubeMapDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     cubeMapDesc.CPUAccessFlags = 0;
@@ -1597,6 +1724,9 @@ void RenderCube(ID3D11DeviceContext* pContext, UINT face)
 
 void RenderSkybox()
 {
+    if (!g_renderSky)
+        return;
+
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
 
     UINT stride = sizeof(CubeVertex);
