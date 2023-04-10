@@ -90,6 +90,9 @@ ID3D11Buffer*               g_pConstantBuffer = NULL;
 ID3D11ShaderResourceView*   g_pTextureRV = NULL;    // for uv texture 
 ID3D11SamplerState*         g_pSamplerLinear = NULL;
 
+bool useGeoShader = true;
+ID3D11GeometryShader*       g_pGeoShader = NULL;
+
 //--------------------------------------------------------------------------------------
 // Forward declarations
 //--------------------------------------------------------------------------------------
@@ -158,7 +161,7 @@ void    DrawCubeMap(UINT);
 DXGI_FORMAT g_fmt = DXGI_FORMAT_B8G8R8A8_UNORM;
 bool g_renderSky = true;
 bool g_MSAA = true;
-bool g_swapBuffer = false;
+bool g_swapBuffer = true;
 ID3D11Texture2D* g_pBackTexture = NULL;
 ID3D11Texture2D* g_pResolveTexture = NULL;
 ID3D11Texture2D* g_pSysBackTexture = NULL;
@@ -568,14 +571,12 @@ HRESULT CreateRenderTargetView(UINT width, UINT height)
             return hr;
         hr = g_pd3dDevice->CreateRenderTargetView(g_pBackTexture, NULL, &g_pRenderTargetView);
 
-        //g_pBackTexture->GetDesc(&texDesc);
         g_pBackTexture->Release();
     } else {
         UINT sampleCnt = (g_MSAA) ? 4 : 1;
         hr = CreateBackTexture(g_width, g_height, &g_pBackTexture, sampleCnt);
         if (FAILED(hr))
             return hr;
-        //g_pBackTexture->GetDesc(&texDesc);
 
         // create resolved Texture
         hr = CreateBackTexture(g_width, g_height, &g_pResolveTexture, 1);
@@ -654,7 +655,7 @@ void SetViewPort(ID3D11DeviceContext* pContext, UINT width, UINT height)
     pContext->RSSetViewports(1, &vp);
 }
 
-HRESULT InitShaders()
+HRESULT InitVS()
 {
     HRESULT hr = S_OK;
 
@@ -678,6 +679,13 @@ HRESULT InitShaders()
         return hr;
     }
 
+    return hr;
+}
+
+HRESULT InitPS()
+{
+    HRESULT hr = S_OK;
+
     // Compile the pixel shader (PS)
     ID3DBlob* pPSBlob = NULL;
     hr = CompileShaderFromFile(L"shaders.fx", "PS", "ps_4_0", &pPSBlob);
@@ -697,7 +705,15 @@ HRESULT InitShaders()
     if (FAILED(hr))
         return hr;
 
+    return hr;
+}
+
+HRESULT InitPSSolid()
+{
+    HRESULT hr = S_OK;
+
     // Compile the pixel shader (PSSolid)
+    ID3DBlob* pPSBlob = NULL;
     hr = CompileShaderFromFile(L"shaders.fx", "PSSolid", "ps_4_0", &pPSBlob);
     if (FAILED(hr))
     {
@@ -714,6 +730,46 @@ HRESULT InitShaders()
     pPSBlob->Release();
     if (FAILED(hr))
         return hr;
+
+    return hr;
+}
+
+HRESULT InitGS()
+{
+    HRESULT hr = S_OK;
+
+    // Compile the geometry shader (GS)
+    ID3DBlob* pGSBlob = NULL;
+    hr = CompileShaderFromFile(L"shaders.fx", "GS", "gs_4_0", &pGSBlob);
+    if (FAILED(hr))
+    {
+        MessageBox(NULL,
+            L"The GS FX file cannot be compiled.  Please run this executable from the directory that contains the FX file.", L"Error", MB_OK);
+        return hr;
+    }
+
+    hr = g_pd3dDevice->CreateGeometryShader(pGSBlob->GetBufferPointer(),
+                                            pGSBlob->GetBufferSize(),
+                                            NULL,
+                                            &g_pGeoShader);
+    pGSBlob->Release();
+    if (FAILED(hr))
+        return hr;
+    
+    return hr;
+}
+
+HRESULT InitShaders()
+{
+    HRESULT hr = S_OK;
+
+    hr = InitVS();
+    hr = InitPS();
+    hr = InitPSSolid();
+    
+    if (useGeoShader) {
+        hr = InitGS();
+    }
 
     return hr;
 }
@@ -889,6 +945,31 @@ HRESULT InitConstBuffer(UINT width, UINT height)
     return S_OK;
 }
 
+void RenderLights(ID3D11DeviceContext* pContext, ConstantBuffer& cb1, XMFLOAT4 vLightDirs[], XMFLOAT4 vLightColors[])
+{
+    if (useGeoShader) {
+        pContext->GSSetShader(g_pGeoShader, NULL, 0);
+    } else {
+        pContext->GSSetShader(NULL, NULL, 0);
+    }
+    pContext->PSSetShader(g_pPSSolid, NULL, 0);
+
+    for (int m = 0; m < 2; m++)
+    {
+        XMMATRIX mLight = XMMatrixTranslationFromVector(5.0f * XMLoadFloat4(&vLightDirs[m]));
+        XMMATRIX mLightScale = XMMatrixScaling(0.05f, 0.05f, 0.05f);
+        mLight = mLightScale * mLight;
+
+        // Update the world variable to reflect the current light
+        cb1.mWorld = XMMatrixTranspose(mLight);
+        cb1.vOutputColor = vLightColors[m];
+        pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+
+        pContext->DrawIndexed(36, 0, 0);
+        //pContext->Draw(24, 0);
+    }
+}
+
 void RenderWorld() 
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
@@ -903,6 +984,10 @@ void RenderWorld()
     pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
 
     pContext->PSSetShader(g_pPixelShader, NULL, 0);
+    if (useGeoShader) {
+        pContext->GSSetShader(g_pGeoShader, NULL, 0);
+    }
+
     pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
     pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
@@ -913,13 +998,13 @@ void RenderWorld()
     static float t = 0.0f;
     if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
         t += (float)XM_PI * 0.0125f;
-    }
-    else {
+    } else {
         static DWORD dwTimeStart = 0;
         DWORD dwTimeCur = (DWORD)GetTickCount64();
         if (dwTimeStart == 0)
             dwTimeStart = dwTimeCur;
         t = (dwTimeCur - dwTimeStart) / 1000.0f;
+        //t = 0; // fixed location
     }
 
     // Setup our lighting parameters
@@ -961,21 +1046,11 @@ void RenderWorld()
 
     pContext->DrawIndexed(36, 0, 0);
 
-    // Render each light
-    pContext->PSSetShader(g_pPSSolid, NULL, 0);
-    for (int m = 0; m < 2; m++)
-    {
-        XMMATRIX mLight = XMMatrixTranslationFromVector(5.0f * XMLoadFloat4(&vLightDirs[m]));
-        XMMATRIX mLightScale = XMMatrixScaling(0.05f, 0.05f, 0.05f);
-        mLight = mLightScale * mLight;
-
-        // Update the world variable to reflect the current light
-        cb1.mWorld = XMMatrixTranspose(mLight);
-        cb1.vOutputColor = vLightColors[m];
-        pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
-
-        pContext->DrawIndexed(36, 0, 0);
-    }
+    // Render each light' position
+    RenderLights(pContext, cb1, vLightDirs, vLightColors);
+    
+    // reset
+    pContext->GSSetShader(NULL, NULL, 0);
 }
 
 void RenderSkybox();
@@ -1019,6 +1094,7 @@ void CleanupDevice()
     if (g_pVertexLayout) g_pVertexLayout->Release();
     if (g_pVertexShader) g_pVertexShader->Release();
     if (g_pPixelShader) g_pPixelShader->Release();
+    if (g_pPSSolid) g_pPSSolid->Release();
     if (g_pRasterizerState) g_pRasterizerState->Release();
     if (g_pDepthStencil) g_pDepthStencil->Release();
     if (g_pDepthStencilView) g_pDepthStencilView->Release();
@@ -1026,6 +1102,8 @@ void CleanupDevice()
     if (g_pSwapChain) g_pSwapChain->Release();
     if (g_pImmediateContext) g_pImmediateContext->Release();
     if (g_pd3dDevice) g_pd3dDevice->Release();
+
+    if (g_pGeoShader) g_pGeoShader->Release();
 
     CleanupIBL();
 
