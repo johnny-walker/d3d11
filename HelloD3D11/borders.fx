@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------
-// File: shaders.fx
+// File: borders.fx
 //--------------------------------------------------------------------------------------
 SamplerState samLinear : register(s0);
 Texture2D txDiffuse : register(t0);
@@ -16,7 +16,6 @@ cbuffer ConstantBuffer : register( b0 )
 	float4 vLightColor[2];
 	float4 vOutputColor;
 }
-
 
 //--------------------------------------------------------------------------------------
 struct VS_INPUT

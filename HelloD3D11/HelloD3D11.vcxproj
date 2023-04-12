@@ -171,6 +171,7 @@ copy .\*.manifest ..\x64\Release</Command>
   <ItemGroup>
     <ClInclude Include="D3DUtil.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="MeshGraph.h" />
     <ClInclude Include="HelloD3D11.h" />
     <ClInclude Include="IImageWrapper.h" />
     <ClInclude Include="Resource.h" />

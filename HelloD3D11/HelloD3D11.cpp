@@ -90,11 +90,8 @@ ID3D11Buffer*               g_pConstantBuffer = NULL;
 ID3D11ShaderResourceView*   g_pTextureRV = NULL;    // for uv texture 
 ID3D11SamplerState*         g_pSamplerLinear = NULL;
 
-bool useGeoShader = true;
-ID3D11GeometryShader*       g_pGeoShader = NULL;
-
 //--------------------------------------------------------------------------------------
-// Forward declarations
+// declarations
 //--------------------------------------------------------------------------------------
 HINSTANCE hInst;                                // current instance
 WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
@@ -121,7 +118,6 @@ void                Render();
 HRESULT             InitIBL();
 HRESULT             InitSkyboxShaders();
 void                CleanupIBL();
-
 
 // IBL, cubmap, skybox
 ID3DBlob*                   g_pCubeVSBlob = NULL;
@@ -165,6 +161,39 @@ bool g_swapBuffer = true;
 ID3D11Texture2D* g_pBackTexture = NULL;
 ID3D11Texture2D* g_pResolveTexture = NULL;
 ID3D11Texture2D* g_pSysBackTexture = NULL;
+
+//--------------------------------------------------------------------------------------
+// Mesh Borders Detection
+//--------------------------------------------------------------------------------------
+#include "meshGraph.h"
+bool useBorderShader = true;
+ID3D11GeometryShader* g_pGeoShader = NULL;
+vector<Pair>          g_pathList;
+
+vector<Pair> DetectBorders(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
+{
+    Graph meshGraph;
+    // init graph from mesh verteies
+    vector<MeshVertex> vecMeshVtx;
+    for (int i = 0; i < numVertex; i++) {
+        MeshVertex meshVtx;
+        meshVtx.index = i;
+        meshVtx.normal = vertices[i].Normal;
+        vecMeshVtx.push_back(meshVtx);
+    }
+    meshGraph.InitMesh(vecMeshVtx);
+    
+    // handle triangle paths
+    for (int i = 0; i < numIndex; i+=3) {
+        meshGraph.InsertPath(indices[i], indices[i+1]);
+        meshGraph.InsertPath(indices[i+1], indices[i+2]);
+        meshGraph.InsertPath(indices[i+2], indices[i]);
+    }
+    vector<Pair> pairList;
+    meshGraph.FindXYPlaneBorders(pairList);
+    return pairList;
+}
+
 //------------------------------------------------------------------------------------
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -734,13 +763,13 @@ HRESULT InitPSSolid()
     return hr;
 }
 
-HRESULT InitGS()
+HRESULT InitBorderShaders()
 {
     HRESULT hr = S_OK;
 
     // Compile the geometry shader (GS)
     ID3DBlob* pGSBlob = NULL;
-    hr = CompileShaderFromFile(L"shaders.fx", "GS", "gs_4_0", &pGSBlob);
+    hr = CompileShaderFromFile(L"borders.fx", "GS", "gs_4_0", &pGSBlob);
     if (FAILED(hr))
     {
         MessageBox(NULL,
@@ -764,11 +793,11 @@ HRESULT InitShaders()
     HRESULT hr = S_OK;
 
     hr = InitVS();
-    hr = InitPS();
-    hr = InitPSSolid();
+    hr = InitPS();      // render cube
+    hr = InitPSSolid(); // render light sources
     
-    if (useGeoShader) {
-        hr = InitGS();
+    if (useBorderShader) {
+        //hr = InitBorderShaders();  // render cube borders
     }
 
     return hr;
@@ -871,6 +900,7 @@ HRESULT InitVertex()
     InitData.pSysMem = indices;
     hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pIndexBuffer);
 
+    g_pathList = DetectBorders(vertices, (int)numVertexElements, indices, (int)numIndices);
     return hr;
 }
 
@@ -947,11 +977,6 @@ HRESULT InitConstBuffer(UINT width, UINT height)
 
 void RenderLights(ID3D11DeviceContext* pContext, ConstantBuffer& cb1, XMFLOAT4 vLightDirs[], XMFLOAT4 vLightColors[])
 {
-    if (useGeoShader) {
-        pContext->GSSetShader(g_pGeoShader, NULL, 0);
-    } else {
-        pContext->GSSetShader(NULL, NULL, 0);
-    }
     pContext->PSSetShader(g_pPSSolid, NULL, 0);
 
     for (int m = 0; m < 2; m++)
@@ -984,9 +1009,6 @@ void RenderWorld()
     pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
 
     pContext->PSSetShader(g_pPixelShader, NULL, 0);
-    if (useGeoShader) {
-        pContext->GSSetShader(g_pGeoShader, NULL, 0);
-    }
 
     pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
@@ -1049,6 +1071,87 @@ void RenderWorld()
     // Render each light' position
     RenderLights(pContext, cb1, vLightDirs, vLightColors);
     
+    // reset
+    pContext->GSSetShader(NULL, NULL, 0);
+}
+
+void RenderBorder()
+{
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+
+    UINT stride = sizeof(SimpleVertex);
+    UINT offset = 0;
+    pContext->IASetInputLayout(g_pVertexLayout);
+    pContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
+    pContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+    pContext->VSSetShader(g_pVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+
+    pContext->PSSetShader(g_pPixelShader, NULL, 0);
+
+    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+
+    pContext->RSSetState(g_pRasterizerState);
+
+    // Update time
+    static float t = 0.0f;
+    if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
+        t += (float)XM_PI * 0.0125f;
+    }
+    else {
+        static DWORD dwTimeStart = 0;
+        DWORD dwTimeCur = (DWORD)GetTickCount64();
+        if (dwTimeStart == 0)
+            dwTimeStart = dwTimeCur;
+        t = (dwTimeCur - dwTimeStart) / 1000.0f;
+        //t = 0; // fixed location
+    }
+
+    // Setup our lighting parameters
+    XMFLOAT4 vLightDirs[2] =
+    {
+        XMFLOAT4(-0.3f, 0.3f, -0.5f, 1.0f),
+        XMFLOAT4(0.0f, 0.0f, -0.8f, 1.0f),
+    };
+    XMFLOAT4 vLightColors[2] =
+    {
+        XMFLOAT4(0.8f, 0.8f, 0.3f, 1.0f),
+        XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f)
+    };
+
+    // Rotate the second light around the origin
+    XMMATRIX mRotate = XMMatrixRotationY(-1.0f * t);
+    XMVECTOR vLightDir = XMLoadFloat4(&vLightDirs[1]);
+    vLightDir = XMVector3Transform(vLightDir, mRotate);
+    XMStoreFloat4(&vLightDirs[1], vLightDir);
+
+    XMMATRIX world;
+    world = XMMatrixRotationX(t) * XMMatrixRotationY(t);
+
+    // update color 
+    vLightColors[1].x = (sinf(t * 1.0f) + 1.0f) * 0.5f;
+    vLightColors[1].y = (cosf(t * 3.0f) + 1.0f) * 0.5f;
+    vLightColors[1].z = (sinf(t * 5.0f) + 1.0f) * 0.5f;
+
+    ConstantBuffer cb1;
+    cb1.mWorld = XMMatrixTranspose(world);
+    cb1.mView = XMMatrixTranspose(g_View);
+    cb1.mProjection = XMMatrixTranspose(g_Projection);
+    cb1.vLightDir[0] = vLightDirs[0];
+    cb1.vLightDir[1] = vLightDirs[1];
+    cb1.vLightColor[0] = vLightColors[0];
+    cb1.vLightColor[1] = vLightColors[1];
+    cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
+    pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+
+    pContext->DrawIndexed(36, 0, 0);
+
+    // Render each light' position
+    RenderLights(pContext, cb1, vLightDirs, vLightColors);
+
     // reset
     pContext->GSSetShader(NULL, NULL, 0);
 }
