@@ -55,7 +55,7 @@ public:
     }
 
     // paths with single traversal are borders
-    void FindXYPlaneBorders(vector<Pair>& pairList) {
+    void DetectXYPlaneBorders(vector<Pair>& pairList) {
         auto iter = m_pathList.begin();
         for (; iter != m_pathList.end(); iter = next(iter)) {
             if (iter->count == 1) {

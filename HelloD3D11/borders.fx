@@ -35,7 +35,8 @@ struct PS_INPUT
 //--------------------------------------------------------------------------------------
 // Vertex Shader
 //--------------------------------------------------------------------------------------
-PS_INPUT VS( VS_INPUT input )
+/*
+PS_INPUT VS(VS_INPUT input)
 {
     PS_INPUT output = (PS_INPUT)0;
     output.Pos = mul( input.Pos, World );
@@ -46,7 +47,7 @@ PS_INPUT VS( VS_INPUT input )
     
     return output;
 }
-
+*/
 //--------------------------------------------------------------------------------------
 // Geometry Shader (passthru)
 //--------------------------------------------------------------------------------------
@@ -74,7 +75,8 @@ void GS(triangle PS_INPUT input[3], inout TriangleStream<PS_INPUT> OutputStream)
 //--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
-float4 PS( PS_INPUT input) : SV_Target
+/*
+float4 PS(PS_INPUT input) : SV_Target
 {
     float4 finalColor = 0;
     
@@ -89,12 +91,5 @@ float4 PS( PS_INPUT input) : SV_Target
     finalColor.a = 1;
     return finalColor;
 }
+*/
 
-
-//--------------------------------------------------------------------------------------
-// PSSolid - render a solid color
-//--------------------------------------------------------------------------------------
-float4 PSSolid( PS_INPUT input) : SV_Target
-{
-    return vOutputColor;
-}

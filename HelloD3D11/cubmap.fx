@@ -54,13 +54,25 @@ float2 SampleSphericalMap(float3 v)
     return uv;
 }
 
+float3 ACESToneMapping(float3 color, float exposure);
 float4 PS_Cubmap(SKYMAP_VS_OUTPUT input) : SV_Target
 {
     float3 nrmlPos = normalize(input.texCoord.xyz);
     float2 uv = SampleSphericalMap(nrmlPos);
     float3 color = txHdrMap.Sample(samLinear, uv).rgb;
+    color = ACESToneMapping(color, 0.3);
+
     return float4(color, 1.f);
 }
 
+float3 ACESToneMapping(float3 color, float exposure)
+{
+    const float A = 2.51;
+    const float B = 0.03;
+    const float C = 2.43;
+    const float D = 0.59;
+    const float E = 0.14;
 
-
+    color *= exposure;
+    return (color * (A * color + B)) / (color * (C * color + D) + E);
+}

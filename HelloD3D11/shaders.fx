@@ -49,30 +49,6 @@ PS_INPUT VS( VS_INPUT input )
 }
 
 //--------------------------------------------------------------------------------------
-// Geometry Shader (passthru)
-//--------------------------------------------------------------------------------------
-[maxvertexcount(3)]
-void GS(triangle PS_INPUT input[3], inout TriangleStream<PS_INPUT> OutputStream)
-{
-    PS_INPUT gsout;
-
-    gsout.Norm = input[0].Norm;
-    gsout.Tex = input[0].Tex;
-    gsout.Pos = input[0].Pos + float4(0.02, 0, 0, 0.0);
-    OutputStream.Append(gsout);
-
-    gsout.Norm = input[1].Norm;
-    gsout.Tex = input[1].Tex;
-    gsout.Pos = input[1].Pos + float4(0.02, 0, 0, 0.0);
-    OutputStream.Append(gsout);
-
-    gsout.Norm = input[2].Norm;
-    gsout.Tex = input[2].Tex;
-    gsout.Pos = input[2].Pos + float4(0.02, 0, 0, 0.0);
-    OutputStream.Append(gsout);
-}
-
-//--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
 float4 PS( PS_INPUT input) : SV_Target

@@ -65,6 +65,7 @@ HWND                        g_hWnd = NULL;
 UINT                        g_width = SCREEN_WIDTH;
 UINT                        g_height = SCREEN_HEIGHT;
 
+XMVECTOR                    g_eye = XMVectorSet(0.f, 2.f, -5.f, 0.f);
 XMMATRIX                    g_View;
 XMMATRIX                    g_Projection;
 
@@ -166,9 +167,11 @@ ID3D11Texture2D* g_pSysBackTexture = NULL;
 // Mesh Borders Detection
 //--------------------------------------------------------------------------------------
 #include "meshGraph.h"
-bool useBorderShader = true;
-ID3D11GeometryShader* g_pGeoShader = NULL;
-vector<Pair>          g_pathList;
+bool                    g_useBorderShader = false;
+ID3D11GeometryShader*   g_pGeoShader = NULL;
+ID3D11Buffer*           g_pBorderIndexBuffer = NULL;
+vector<Pair>            g_pathList;
+int                     g_numIndex = 0;
 
 vector<Pair> DetectBorders(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
 {
@@ -190,7 +193,7 @@ vector<Pair> DetectBorders(SimpleVertex vertices[], int numVertex, WORD indices[
         meshGraph.InsertPath(indices[i+2], indices[i]);
     }
     vector<Pair> pairList;
-    meshGraph.FindXYPlaneBorders(pairList);
+    meshGraph.DetectXYPlaneBorders(pairList);
     return pairList;
 }
 
@@ -796,9 +799,37 @@ HRESULT InitShaders()
     hr = InitPS();      // render cube
     hr = InitPSSolid(); // render light sources
     
-    if (useBorderShader) {
-        //hr = InitBorderShaders();  // render cube borders
+    if (g_useBorderShader) {
+        hr = InitBorderShaders();  // render cube borders
     }
+
+    return hr;
+}
+
+HRESULT InitBorderIndexBuffer(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
+{
+    g_pathList = DetectBorders(vertices, (int)numVertex, indices, (int)numIndex);
+    int numPaths = g_pathList.size();
+    g_numIndex = numPaths * 2;
+    WORD* lineIndices = new WORD[g_numIndex];
+    for (int i = 0; i < numPaths; i++) {
+        lineIndices[i*2]   = get<0>(g_pathList[i]);
+        lineIndices[i*2+1] = get<1>(g_pathList[i]);
+    }
+
+    D3D11_BUFFER_DESC bd;
+    ZeroMemory(&bd, sizeof(bd));
+    bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.ByteWidth = sizeof(WORD) * g_numIndex;
+    bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    bd.CPUAccessFlags = 0;
+
+    D3D11_SUBRESOURCE_DATA InitData;
+    ZeroMemory(&InitData, sizeof(InitData));
+    InitData.pSysMem = lineIndices;
+    HRESULT hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pBorderIndexBuffer);
+
+    delete[] lineIndices;
 
     return hr;
 }
@@ -899,8 +930,10 @@ HRESULT InitVertex()
     bd.CPUAccessFlags = 0;
     InitData.pSysMem = indices;
     hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pIndexBuffer);
+    
+    //create necessary buffers/objects for border rendering
+    InitBorderIndexBuffer(vertices, (int)numVertexElements, indices, (int)numIndices);
 
-    g_pathList = DetectBorders(vertices, (int)numVertexElements, indices, (int)numIndices);
     return hr;
 }
 
@@ -964,15 +997,54 @@ HRESULT InitConstBuffer(UINT width, UINT height)
         return hr;
 
     // Initialize the camera view matrix
-    XMVECTOR Eye = XMVectorSet(5.f, 2.f, 0.f, 0.f);
-    XMVECTOR At  = XMVectorSet(0.f, 0.f,  0.f, 0.f);
-    XMVECTOR Up  = XMVectorSet(0.f, 1.f,  0.f, 0.f);
+    XMVECTOR Eye = g_eye; //XMVectorSet(-5.f, 0.f, -5.f, 0.f);
+    XMVECTOR At  = XMVectorSet(0.f, 0.f, 0.f, 0.f);
+    XMVECTOR Up  = XMVectorSet(0.f, 1.f, 0.f, 0.f);
     g_View = XMMatrixLookAtLH(Eye, At, Up);
 
     // Initialize the projection matrix
     g_Projection = XMMatrixPerspectiveFovLH(XM_PIDIV2, (FLOAT)width / (FLOAT)height, 0.01f, 100.f);
 
     return S_OK;
+}
+
+void RenderBorders(float t)
+{
+    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
+
+    UINT stride = sizeof(SimpleVertex);
+    UINT offset = 0;
+
+    pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+    pContext->IASetIndexBuffer(g_pBorderIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+    pContext->VSSetShader(g_pVertexShader, NULL, 0);
+    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    if (g_useBorderShader)
+        pContext->GSSetShader(g_pGeoShader, NULL, 0);
+
+    pContext->PSSetShader(g_pPSSolid, NULL, 0);
+
+    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
+    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
+
+    pContext->RSSetState(g_pRasterizerState);
+
+    XMMATRIX world;
+    world = XMMatrixRotationX(t) * XMMatrixRotationY(t);
+
+    ConstantBuffer cb1;
+    cb1.mWorld = XMMatrixTranspose(world);
+    cb1.mView = XMMatrixTranspose(g_View);
+    cb1.mProjection = XMMatrixTranspose(g_Projection);
+    cb1.vOutputColor = XMFLOAT4(1.0, 0, 0, 0);
+    pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+    pContext->DrawIndexed(g_numIndex, 0, 0);
+
+    // reset
+    if (g_useBorderShader)
+        pContext->GSSetShader(NULL, NULL, 0);
 }
 
 void RenderLights(ID3D11DeviceContext* pContext, ConstantBuffer& cb1, XMFLOAT4 vLightDirs[], XMFLOAT4 vLightColors[])
@@ -995,7 +1067,7 @@ void RenderLights(ID3D11DeviceContext* pContext, ConstantBuffer& cb1, XMFLOAT4 v
     }
 }
 
-void RenderWorld() 
+void RenderWorld(bool rotation=false) 
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
 
@@ -1016,100 +1088,19 @@ void RenderWorld()
 
     pContext->RSSetState(g_pRasterizerState);
 
-    // Update time
     static float t = 0.0f;
-    if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
-        t += (float)XM_PI * 0.0125f;
-    } else {
-        static DWORD dwTimeStart = 0;
-        DWORD dwTimeCur = (DWORD)GetTickCount64();
-        if (dwTimeStart == 0)
-            dwTimeStart = dwTimeCur;
-        t = (dwTimeCur - dwTimeStart) / 1000.0f;
-        //t = 0; // fixed location
+    if (rotation) {
+        // Update time
+        if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
+            t += (float)XM_PI * 0.0125f;
+        } else {
+            static DWORD dwTimeStart = 0;
+            DWORD dwTimeCur = (DWORD)GetTickCount64();
+            if (dwTimeStart == 0)
+                dwTimeStart = dwTimeCur;
+            t = (dwTimeCur - dwTimeStart) / 1000.0f;
+        }
     }
-
-    // Setup our lighting parameters
-    XMFLOAT4 vLightDirs[2] =
-    {
-        XMFLOAT4(-0.3f, 0.3f, -0.5f, 1.0f),
-        XMFLOAT4(0.0f, 0.0f, -0.8f, 1.0f),
-    };
-    XMFLOAT4 vLightColors[2] =
-    {
-        XMFLOAT4(0.8f, 0.8f, 0.3f, 1.0f),
-        XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f)
-    };
-
-    // Rotate the second light around the origin
-    XMMATRIX mRotate = XMMatrixRotationY(-1.0f * t);
-    XMVECTOR vLightDir = XMLoadFloat4(&vLightDirs[1]);
-    vLightDir = XMVector3Transform(vLightDir, mRotate);
-    XMStoreFloat4(&vLightDirs[1], vLightDir);
-
-    XMMATRIX world;
-    world = XMMatrixRotationX(t) * XMMatrixRotationY(t);
-
-    // update color 
-    vLightColors[1].x = (sinf(t * 1.0f) + 1.0f) * 0.5f;
-    vLightColors[1].y = (cosf(t * 3.0f) + 1.0f) * 0.5f;
-    vLightColors[1].z = (sinf(t * 5.0f) + 1.0f) * 0.5f;
-
-    ConstantBuffer cb1;
-    cb1.mWorld = XMMatrixTranspose(world);
-    cb1.mView = XMMatrixTranspose(g_View);
-    cb1.mProjection = XMMatrixTranspose(g_Projection);
-    cb1.vLightDir[0] = vLightDirs[0];
-    cb1.vLightDir[1] = vLightDirs[1];
-    cb1.vLightColor[0] = vLightColors[0];
-    cb1.vLightColor[1] = vLightColors[1];
-    cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
-    pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
-
-    pContext->DrawIndexed(36, 0, 0);
-
-    // Render each light' position
-    RenderLights(pContext, cb1, vLightDirs, vLightColors);
-    
-    // reset
-    pContext->GSSetShader(NULL, NULL, 0);
-}
-
-void RenderBorder()
-{
-    ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
-
-    UINT stride = sizeof(SimpleVertex);
-    UINT offset = 0;
-    pContext->IASetInputLayout(g_pVertexLayout);
-    pContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
-    pContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-    pContext->VSSetShader(g_pVertexShader, NULL, 0);
-    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-
-    pContext->PSSetShader(g_pPixelShader, NULL, 0);
-
-    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
-    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
-
-    pContext->RSSetState(g_pRasterizerState);
-
-    // Update time
-    static float t = 0.0f;
-    if (g_driverType == D3D_DRIVER_TYPE_REFERENCE) {
-        t += (float)XM_PI * 0.0125f;
-    }
-    else {
-        static DWORD dwTimeStart = 0;
-        DWORD dwTimeCur = (DWORD)GetTickCount64();
-        if (dwTimeStart == 0)
-            dwTimeStart = dwTimeCur;
-        t = (dwTimeCur - dwTimeStart) / 1000.0f;
-        //t = 0; // fixed location
-    }
-
     // Setup our lighting parameters
     XMFLOAT4 vLightDirs[2] =
     {
@@ -1152,9 +1143,13 @@ void RenderBorder()
     // Render each light' position
     RenderLights(pContext, cb1, vLightDirs, vLightColors);
 
+    // Render borders
+    RenderBorders(t);
+
     // reset
     pContext->GSSetShader(NULL, NULL, 0);
 }
+
 
 void RenderSkybox();
 void Render()
@@ -1166,12 +1161,12 @@ void Render()
     pContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
     
     // Clear the back buffer &  depth buffer
-    float ClearColor[4] = { 0.0f, 1.0f, 1.f, 1.0f }; // red,green,blue,alpha
+    float ClearColor[4] = { 1.0f, 1.0f, 1.f, 1.0f }; // red,green,blue,alpha
     pContext->ClearRenderTargetView(g_pRenderTargetView, ClearColor);
     pContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
     RenderSkybox();
-    RenderWorld();
+    RenderWorld(true);
     ExecuteCommandList();
 
     // Present our back buffer to our front buffer
@@ -1207,6 +1202,7 @@ void CleanupDevice()
     if (g_pd3dDevice) g_pd3dDevice->Release();
 
     if (g_pGeoShader) g_pGeoShader->Release();
+    if (g_pBorderIndexBuffer) g_pBorderIndexBuffer->Release();
 
     CleanupIBL();
 
