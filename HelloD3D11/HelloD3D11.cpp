@@ -173,30 +173,6 @@ ID3D11Buffer*           g_pBorderIndexBuffer = NULL;
 vector<Pair>            g_pathList;
 int                     g_numIndex = 0;
 
-vector<Pair> DetectBorders(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
-{
-    Graph meshGraph;
-    // init graph from mesh verteies
-    vector<MeshVertex> vecMeshVtx;
-    for (int i = 0; i < numVertex; i++) {
-        MeshVertex meshVtx;
-        meshVtx.index = i;
-        meshVtx.normal = vertices[i].Normal;
-        vecMeshVtx.push_back(meshVtx);
-    }
-    meshGraph.InitMesh(vecMeshVtx);
-    
-    // handle triangle paths
-    for (int i = 0; i < numIndex; i+=3) {
-        meshGraph.InsertPath(indices[i], indices[i+1]);
-        meshGraph.InsertPath(indices[i+1], indices[i+2]);
-        meshGraph.InsertPath(indices[i+2], indices[i]);
-    }
-    vector<Pair> pairList;
-    meshGraph.DetectXYPlaneBorders(pairList);
-    return pairList;
-}
-
 //------------------------------------------------------------------------------------
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -808,13 +784,16 @@ HRESULT InitShaders()
 
 HRESULT InitBorderIndexBuffer(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
 {
-    g_pathList = DetectBorders(vertices, (int)numVertex, indices, (int)numIndex);
+    Graph meshGraph;
+    g_pathList = meshGraph.DetectBorders(vertices, (int)numVertex, indices, (int)numIndex);
     int numPaths = g_pathList.size();
-    g_numIndex = numPaths * 2;
+    g_numIndex = numPaths*2;
     WORD* lineIndices = new WORD[g_numIndex];
     for (int i = 0; i < numPaths; i++) {
-        lineIndices[i*2]   = get<0>(g_pathList[i]);
-        lineIndices[i*2+1] = get<1>(g_pathList[i]);
+        WORD v0 = get<0>(g_pathList[i]);
+        WORD v1 = get<1>(g_pathList[i]);
+        *(lineIndices+(i*2))   = v0;
+        *(lineIndices+(i*2)+1) = v1;
     }
 
     D3D11_BUFFER_DESC bd;
