@@ -991,25 +991,12 @@ void RenderBorders(float t)
 {
     ID3D11DeviceContext* pContext = g_bDeffer ? g_pDeferredContext : g_pImmediateContext;
 
-    UINT stride = sizeof(SimpleVertex);
-    UINT offset = 0;
-
     pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
     pContext->IASetIndexBuffer(g_pBorderIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-    pContext->VSSetShader(g_pVertexShader, NULL, 0);
-    pContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     if (g_useBorderShader)
         pContext->GSSetShader(g_pGeoShader, NULL, 0);
-
-    pContext->PSSetShader(g_pPSSolid, NULL, 0);
-
-    pContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    pContext->PSSetShaderResources(0, 1, &g_pTextureRV);
-    pContext->PSSetSamplers(0, 1, &g_pSamplerLinear);
-
-    pContext->RSSetState(g_pRasterizerState);
-
+    
     XMMATRIX world;
     world = XMMatrixRotationX(t) * XMMatrixRotationY(t);
 
@@ -1019,6 +1006,7 @@ void RenderBorders(float t)
     cb1.mProjection = XMMatrixTranspose(g_Projection);
     cb1.vOutputColor = XMFLOAT4(1.0, 0, 0, 0);
     pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
+
     pContext->DrawIndexed(g_numIndex, 0, 0);
 
     // reset
