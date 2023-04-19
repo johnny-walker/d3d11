@@ -784,7 +784,7 @@ HRESULT InitShaders()
 
 HRESULT InitBorderIndexBuffer(SimpleVertex vertices[], int numVertex, WORD indices[], int numIndex)
 {
-    Graph meshGraph;
+    MeshGraph meshGraph;
     g_pathList = meshGraph.DetectBorders(vertices, (int)numVertex, indices, (int)numIndex);
     int numPaths = g_pathList.size();
     g_numIndex = numPaths*2;
@@ -996,7 +996,8 @@ void RenderBorders(float t)
 
     if (g_useBorderShader)
         pContext->GSSetShader(g_pGeoShader, NULL, 0);
-    
+
+    // update constant buffer
     XMMATRIX world;
     world = XMMatrixRotationX(t) * XMMatrixRotationY(t);
 
@@ -1004,7 +1005,7 @@ void RenderBorders(float t)
     cb1.mWorld = XMMatrixTranspose(world);
     cb1.mView = XMMatrixTranspose(g_View);
     cb1.mProjection = XMMatrixTranspose(g_Projection);
-    cb1.vOutputColor = XMFLOAT4(1.0, 0, 0, 0);
+    cb1.vOutputColor = XMFLOAT4(1.0, 1.0, 1.0, 1.0);
     pContext->UpdateSubresource(g_pConstantBuffer, 0, NULL, &cb1, 0, 0);
 
     pContext->DrawIndexed(g_numIndex, 0, 0);
